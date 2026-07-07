@@ -307,6 +307,8 @@ const ITEM_BASES = [
   { id:'scroll_identify', name:'Scroll of Identify', type:'scroll', effect:'identify', glyph:'?', color:'#e0d6a0', value:12 },
   { id:'scroll_teleport', name:'Scroll of Teleport', type:'scroll', effect:'teleport', glyph:'?', color:'#a05ae0', value:30 },
   { id:'scroll_fire', name:'Scroll of Fireball', type:'scroll', effect:'scrollfire', power:14, glyph:'?', color:'#e0785a', value:28 },
+  { id:'stone_waymark', name:'Waystone Shard', type:'consumable', effect:'placewaypoint', glyph:'\u2666', color:'#e8ab52', value:40 },
+  { id:'stone_recall', name:'Recall Stone', type:'consumable', effect:'recall', glyph:'\u2666', color:'#5ae0d0', value:55 },
   // misc / valuables
   { id:'gold', name:'Gold Coins', type:'misc', glyph:'$', color:'#e0c34a', value:1 },
   { id:'gem', name:'Gemstone', type:'misc', glyph:'*', color:'#5ae0d0', value:50 },
@@ -429,7 +431,7 @@ const SPELLS = [
   { id:'slow', name:'Slow', mp:5, type:'debuff', stat:'dex', power:-5, dur:8, range:5, desc:'Saps a foe\'s speed.' },
   { id:'fear', name:'Fear', mp:5, type:'debuff', stat:'fear', power:1, dur:6, range:5, desc:'Fills a foe with dread, causing it to flee.' },
   { id:'blink', name:'Blink', mp:4, type:'utility', power:5, range:0, desc:'Teleport a short distance.' },
-  { id:'teleport', name:'Teleport', mp:10, type:'utility', power:30, range:0, desc:'Teleport a great distance.' },
+  { id:'teleport', name:'Teleport', mp:10, type:'travelbypass', power:0, range:0, desc:'Open the waystone network and travel to any known destination, from anywhere.' },
   { id:'detect', name:'Detect Creatures', mp:4, type:'utility', power:0, range:0, desc:'Sense nearby creatures through walls.' },
   { id:'drain', name:'Drain Life', mp:7, type:'drain', power:[4,9], range:4, desc:'Steals life from a foe.' },
   { id:'invisibility', name:'Invisibility', mp:9, type:'buff', stat:'invis', power:1, dur:10, range:0, desc:'Fades you from sight.' },
@@ -955,6 +957,7 @@ const CYBERNETICS = [
   { id:'rocketpod', name:'Wrist-Mounted Rocket Launcher', category:'Exotic', activation:'active', resource:'charge', mp:28, type:'damage', power:[14,24], range:6, aoe:true, aoeRadius:2, destructive:true, desc:'A compact rocket pod — devastating, and not subtle.' },
   { id:'chronoscanner', name:'Chronoscanner Overclock', category:'Exotic', activation:'active', resource:'charge', mp:20, type:'debuff', stat:'dex', power:-8, dur:10, range:5, aoe:true, aoeRadius:2, desc:'Overclocks your perception, making enemies seem to crawl.' },
   { id:'blinkdrive', name:'Blink Drive Implant', category:'Exotic', activation:'active', resource:'charge', mp:24, type:'blinklike', power:30, range:0, desc:'A prototype short-range teleportation implant.' },
+  { id:'warprelay', name:'Warp Relay Implant', category:'Exotic', activation:'active', resource:'charge', mp:20, type:'travelbypass', power:0, range:0, desc:'Pings the waystone network and lets you jump to any known site from anywhere.' },
   { id:'railgunarm', name:'Railgun Arm', category:'Exotic', activation:'active', resource:'charge', mp:26, type:'damage', power:[20,32], range:8, desc:'Replaces your forearm with a rail-accelerated slug thrower.' },
   { id:'overloaddischarge', name:'Neural Overload Discharge', category:'Exotic', activation:'active', resource:'charge', mp:24, type:'damage', power:[10,18], range:5, aoe:true, aoeRadius:2, desc:'Discharges raw current through anything nearby.' },
 ];
@@ -987,6 +990,7 @@ const MUTATIONS = [
   { id:'chrysalisskin', name:'Chrysalis Skin', category:'Aberrant', activation:'passive', corruptionReq:30, desc:'Your skin has taken on a hardened, chitinous sheen.', apply:()=>{ player.mutationArmor=(player.mutationArmor||0)+4; player.maxHp+=15; player.hp+=15; } },
   { id:'warpstep', name:'Warp Step', category:'Aberrant', activation:'active', corruptionReq:35, resource:'hp', selfCost:12, type:'blinklike', power:30, range:0, desc:'You step through a fold in space that should not exist.' },
   { id:'hivemindwhisper', name:'Hivemind Whisper', category:'Aberrant', activation:'active', corruptionReq:45, resource:'hp', selfCost:15, type:'summon', summonId:'spirit', duration:60, range:0, desc:'You call out in a language older than words, and something answers.' },
+  { id:'ninthdoor', name:'The Ninth Door', category:'Aberrant', activation:'active', corruptionReq:40, resource:'hp', mp:16, type:'travelbypass', power:0, range:0, desc:'Your mind carves a door where none should exist, opening onto the waystone network from anywhere — no waystone required, only a piece of yourself.' },
   { id:'apotheosis', name:'Apotheosis', category:'Aberrant', activation:'passive', corruptionReq:60, desc:'You are becoming something else entirely.', apply:()=>{ player.str+=2; player.dex+=2; player.int+=2; player.con+=2; player.wis+=2; } },
 ];
 
@@ -3072,6 +3076,8 @@ function ascend() {
 function useStairs() {
   if (curIsDungeon()) {
     const lvl = curDungeonLevel();
+    const t = curTileAt(player.x, player.y);
+    if (t && t.feature === 'waystone') { warpToDungeonEntrance(); return; }
     if (player.x === lvl.downStairs.x && player.y === lvl.downStairs.y) descend();
     else log('No stairs down here.');
   } else {
@@ -3844,6 +3850,8 @@ function enterDungeon(id) {
   player.x = lvl.upStairs.x; player.y = lvl.upStairs.y;
   relocateAllies();
   log(`You enter the ${dg.name} (${dg.tier}) — Depth 1/${dg.maxDepth}.`);
+  player.knownDungeons = player.knownDungeons || [];
+  if (!player.knownDungeons.includes(id)) player.knownDungeons.push(id);
   checkExploreQuests();
   markSeen(); render();
 }
@@ -6965,62 +6973,154 @@ function openLook() {
   renderModal('Look Around', html, 'Esc to close. (Click any visible tile on the map to examine it directly.)');
 }
 
-// ---- quick travel & waypoints ----
+// ---- fast travel overhaul: waystone network ----
+// Destinations only ever appear once the player has actually been there (settlement visited,
+// dungeon entered, or a waypoint personally planted) — see checkFastTravelDiscovery().
+// The free network can only be opened while standing at a waystone (inside a settlement,
+// on a planted waypoint, or on a dungeon's interior exit-waystone). Paying with a Recall Stone,
+// the Teleport spell, the Warp Relay Implant, or The Ninth Door mutation opens the same picker from anywhere instead.
 let travelDestinations = [];
-function openTravel() {
-  if (curIsDungeon()) { log("You can't fast-travel while inside a dungeon. Use G/H to navigate to its stairs instead."); return; }
-  const nearbyThreat = curMonsters().some(m => m.alive && chebyshev(m.x,m.y,player.x,player.y) <= 8 && hasLOS(player.x,player.y,m.x,m.y));
-  if (nearbyThreat) { log("You can't fast-travel with danger nearby!"); return; }
+let pendingTravelBypass = null; // {type:'item'|'spell'|'ability', item?, spell?} — paid only once a destination is confirmed
+
+function isAtWaystoneNow() {
+  if (curIsDungeon()) {
+    const t = curTileAt(player.x, player.y);
+    return !!(t && t.feature === 'waystone');
+  }
+  const c = getChunk(Math.floor(player.x / CH), Math.floor(player.y / CH));
+  if (c && c.settlement) return true;
+  return player.waypoints.some(w => w.x === player.x && w.y === player.y);
+}
+
+function beginBypassTravel(source) {
+  pendingTravelBypass = source;
+  openTravel({ bypass: true });
+}
+
+function warpToDungeonEntrance() {
+  const dg = curDungeon();
+  if (!dg) return;
+  player.mode = 'overworld'; player.dungeonId = null; player.dungeonDepth = 0;
+  player.x = dg.x; player.y = dg.y;
+  relocateAllies();
+  log(`The waystone flares to life, and the dungeon releases you back into daylight at ${dg.name}.`);
+  markSeen(); render();
+}
+
+function openTravel(opts) {
+  opts = opts || {};
+  if (!opts.bypass) {
+    if (!isAtWaystoneNow()) {
+      log("You need to be at a waystone — inside a settlement, on a planted waypoint, or at a dungeon's exit-waystone — to open the travel network for free. A Recall Stone, the Teleport spell, a Warp Relay Implant, or The Ninth Door (an eldritch mutation) can open it from anywhere, for a cost.");
+      return;
+    }
+    if (curIsDungeon()) { warpToDungeonEntrance(); return; }
+    const nearbyThreat = curMonsters().some(m => m.alive && chebyshev(m.x,m.y,player.x,player.y) <= 8 && hasLOS(player.x,player.y,m.x,m.y));
+    if (nearbyThreat) { log("You can't fast-travel with danger nearby!"); return; }
+  }
   gameState = 'travel';
   renderTravel();
 }
+
 function renderTravel() {
   const dests = [];
   const seenSettlements = new Set();
   for (const c of worldChunks.values()) {
-    if (c.settlement && !seenSettlements.has(c.settlement.name)) {
+    if (c.settlement && (player.knownSettlements||[]).includes(c.settlement.name) && !seenSettlements.has(c.settlement.name)) {
       seenSettlements.add(c.settlement.name);
-      dests.push({ name: `${c.settlement.name} (${c.settlement.type})`, x: c.cx*CH+Math.floor(CH/2), y: c.cy*CH+Math.floor(CH/2), kind: 'settlement' });
+      const key = `settlement:${c.settlement.name}`;
+      dests.push({ key, label: player.customNames[key] || `${c.settlement.name} (${c.settlement.type})`, x: c.cx*CH+Math.floor(CH/2), y: c.cy*CH+Math.floor(CH/2), kind: 'settlement' });
     }
   }
-  for (const dg of dungeonRegistry.values()) dests.push({ name: `${dg.name} (${dg.tier})`, x: dg.x, y: dg.y, kind: 'dungeon' });
-  for (const w of player.waypoints) dests.push({ name: w.name, x: w.x, y: w.y, kind: 'waypoint' });
+  for (const id of (player.knownDungeons||[])) {
+    const dg = dungeonRegistry.get(id);
+    if (!dg) continue;
+    const key = `dungeon:${id}`;
+    dests.push({ key, label: player.customNames[key] || `${dg.name} (${dg.tier})`, x: dg.x, y: dg.y, kind: 'dungeon' });
+  }
+  player.waypoints.forEach((w, i) => {
+    const key = `waypoint:${i}`;
+    dests.push({ key, label: player.customNames[key] || w.name, x: w.x, y: w.y, kind: 'waypoint' });
+  });
   dests.forEach(d => d.dist = chebyshev(player.x, player.y, d.x, d.y));
   dests.sort((a, b) => a.dist - b.dist);
   travelDestinations = dests.slice(0, 26);
   let html = '';
-  if (!travelDestinations.length) html += `<div class="npcline dim">Nowhere discovered yet — explore first, or press 'm' out in the field to mark a waypoint.</div>`;
+  if (pendingTravelBypass) html += `<div class="npcline dim">Travelling via ${pendingTravelBypass.type === 'item' ? pendingTravelBypass.item.name : pendingTravelBypass.spell.name} — cost is paid once you pick a destination.</div>`;
+  if (!travelDestinations.length) html += `<div class="npcline dim">Nowhere discovered yet — visit a settlement or dungeon, or plant a Waystone Shard to mark a waypoint.</div>`;
   travelDestinations.forEach((d, i) => {
     const letter = String.fromCharCode(97 + i);
     const tag = d.kind === 'settlement' ? 'town' : d.kind === 'dungeon' ? 'dungeon' : 'waypoint';
-    html += `<div class="modal-opt" onclick="simulateKey('${letter}')">[${letter}] ${d.name} <span class="dim">(${d.dist} tiles, ${tag})</span></div>`;
+    html += `<div class="modal-opt" onclick="simulateKey('${letter}')">[${letter}] ${d.label} <span class="dim">(${d.dist} tiles, ${tag})</span> <span class="dim" style="cursor:pointer" onclick="event.stopPropagation(); renameDestination(${i});">[rename]</span></div>`;
   });
-  renderModal('Fast Travel', html, "Letter/click to travel instantly. Esc to close. (Press 'm' while playing to mark a new waypoint at your current spot.)");
+  renderModal('Fast Travel', html, "Letter/click to travel. Esc to cancel. (Plant a Waystone Shard — key 'm' — to mark a new personal waypoint.)");
 }
+
+function renameDestination(idx) {
+  const d = travelDestinations[idx];
+  if (!d) return;
+  try {
+    if (typeof window !== 'undefined' && window.prompt) {
+      const input = window.prompt('Rename this destination:', d.label);
+      if (input && input.trim()) {
+        if (d.kind === 'waypoint') {
+          const i = parseInt(d.key.split(':')[1], 10);
+          if (player.waypoints[i]) player.waypoints[i].name = input.trim().slice(0, 30);
+        }
+        player.customNames[d.key] = input.trim().slice(0, 30);
+      }
+    }
+  } catch (e) { /* prompt unavailable */ }
+  renderTravel();
+}
+
 function confirmTravel(letter) {
   const idx = letter.charCodeAt(0) - 97;
   const d = travelDestinations[idx];
+  const bypass = pendingTravelBypass;
+  if (!d) { gameState = 'playing'; closeModal(); pendingTravelBypass = null; return; }
+  if (bypass) {
+    if (bypass.type === 'item') {
+      const it = bypass.item;
+      if (!player.inventory.includes(it)) { log("You no longer have that item."); gameState = 'playing'; closeModal(); pendingTravelBypass = null; return; }
+      if (it.amount && it.amount > 1) it.amount--; else player.inventory = player.inventory.filter(i => i.uid !== it.uid);
+    } else {
+      if (!paySpellCost(bypass.spell)) { log(bypass.spell.resource === 'charge' ? 'Not enough charge.' : 'Not enough mana.'); gameState = 'playing'; closeModal(); pendingTravelBypass = null; return; }
+    }
+  }
   gameState = 'playing';
   closeModal();
-  if (!d) return;
+  pendingTravelBypass = null;
+  if (curIsDungeon()) { player.mode = 'overworld'; player.dungeonId = null; player.dungeonDepth = 0; }
   player.x = d.x; player.y = d.y;
   relocateAllies();
-  log(`You travel swiftly to ${d.name}.`);
+  log(`${bypass ? 'A surge of magic tears you away and deposits you' : 'You travel swiftly'} at ${d.label}.`);
+  updateSidebar();
   markSeen();
   render();
 }
-function markWaypoint() {
-  if (curIsDungeon()) { log("You can't mark a waypoint inside a dungeon."); return; }
+
+function plantWaystoneShard(shard) {
+  if (curIsDungeon()) { log("You can't plant a waystone shard inside a dungeon."); return; }
   const defaultName = `Waypoint ${player.waypoints.length + 1}`;
   let name = defaultName;
   try {
     if (typeof window !== 'undefined' && window.prompt) {
-      const input = window.prompt('Name this waypoint:', defaultName);
+      const input = window.prompt('Name this waystone:', defaultName);
       if (input && input.trim()) name = input.trim().slice(0, 30);
     }
   } catch (e) { /* prompt unavailable — fall back to default name */ }
   player.waypoints.push({ name, x: player.x, y: player.y });
-  log(`Waypoint marked: "${name}".`);
+  if (shard.amount && shard.amount > 1) shard.amount--; else player.inventory = player.inventory.filter(i => i.uid !== shard.uid);
+  log(`You plant the Waystone Shard. A waystone rises from the ground: "${name}".`);
+  updateSidebar();
+}
+
+function markWaypoint() {
+  if (curIsDungeon()) { log("You can't plant a waystone shard inside a dungeon."); return; }
+  const shard = player.inventory.find(i => i.effect === 'placewaypoint');
+  if (!shard) { log("You need a Waystone Shard to plant a permanent waypoint here. Alchemists, traders, and dungeon vaults sometimes stock them."); return; }
+  plantWaystoneShard(shard);
 }
 
 // ---- kingdom discovery: guarantees the player actually sees the lore ----
@@ -7032,6 +7132,19 @@ function checkKingdomDiscovery() {
   if (!player.discoveredKingdoms.includes(k.key)) {
     player.discoveredKingdoms.push(k.key);
     log(`*** You have entered ${k.name}. ${k.history} ***`);
+  }
+}
+
+// ---- fast-travel discovery: settlements register once you've actually walked into them ----
+function checkFastTravelDiscovery() {
+  if (curIsDungeon()) return;
+  const c = getChunk(Math.floor(player.x / CH), Math.floor(player.y / CH));
+  if (c && c.settlement) {
+    player.knownSettlements = player.knownSettlements || [];
+    if (!player.knownSettlements.includes(c.settlement.name)) {
+      player.knownSettlements.push(c.settlement.name);
+      log(`${c.settlement.name}'s waystone flickers on — it now links to your travel network.`);
+    }
   }
 }
 
@@ -7276,14 +7389,21 @@ function openHelp() {
   <div class="modal-opt">+ / − or mouse scroll wheel — zoom the camera in and out. This reveals more of the map you've
   already explored; it does not extend your torchlight vision radius.</div>
   <div class="modal-opt">g — pick up an item / open a chest. &nbsp; . or 5 — wait a turn. &nbsp; r — rest until healed or interrupted.</div>
-  <div class="modal-opt"><b>V</b> — open Fast Travel: instantly teleport to any settlement, dungeon, or waypoint you've
-  already discovered (only usable outside dungeons, and only when no danger is nearby). <b>m</b> — mark your current
-  spot as a custom waypoint (you'll be prompted to name it) so you can fast-travel back to it later.</div>
+  <div class="modal-opt"><b>V</b> — open the Fast Travel network, to any settlement, dungeon, or waypoint you've
+  actually visited. Free use requires standing at a waystone (inside a settlement, on a planted waypoint, or a
+  dungeon's exit-waystone) with no danger nearby. A <b>Recall Stone</b>, the <b>Teleport</b> spell, a <b>Warp Relay
+  Implant</b>, or the eldritch mutation <b>The Ninth Door</b> can open the same menu from anywhere, for mana/charge/an
+  item/HP instead. <b>m</b> — plant a <b>Waystone Shard</b> at your current spot to mark a permanent, custom-named
+  waypoint (you'll need one in your inventory). Any destination in the Fast Travel list can also be renamed via its
+  [rename] link.</div>
   <div class="modal-opt">G — auto-<i>walk</i> (spends turns, can be ambushed en route) to the nearest known dungeon
   (overworld) or down stairs (in a dungeon). H — auto-walk to the nearest known settlement (overworld) or back to the up
   stairs (in a dungeon). X (shift+x) — auto-explore toward unseen ground. All auto-walk actions stop the moment danger
-  appears. (Fast Travel via V is instant and free where it applies; G/H/X are the slower, walked alternative useful when
+  appears. (Fast Travel via V is instant where it applies; G/H/X are the slower, walked alternative useful when
   you want to travel through unmapped territory or can't fast-travel for some reason.)</div>
+  <div class="modal-opt">Long dungeons (6+ floors) hide an <b>exit waystone</b> near their final chamber — usually
+  guarded by the boss. Reach it and press <b>&gt;</b> to warp straight back to the surface instead of retracing your
+  steps, and to permanently link that dungeon into your travel network.</div>
 
   <div class="trade-col-title">3. Combat</div>
   <div class="modal-opt">Melee: walk into an adjacent hostile. Ranged weapons (bow/crossbow/sling/wand): equip in your
@@ -7553,6 +7673,12 @@ function castSpell(spellId) {
     blinkPlayer(spell.power || 10);
     endTurn(); return;
   }
+  if (spell.type === 'travelbypass') {
+    const resource = spell.resource || 'mp';
+    if (getPoolValue(resource) < effectiveCost(spell)) { log(resource === 'charge' ? 'Not enough charge.' : 'Not enough mana.'); return; }
+    beginBypassTravel({ type: 'ability', spell });
+    return;
+  }
   if (spell.type === 'detectability' || spell.id === 'detect') {
     if (!paySpellCost(spell)) { log('Not enough mana.'); return; }
     const mons = curMonsters().filter(m => m.alive && chebyshev(m.x,m.y,player.x,player.y) <= 15);
@@ -7560,7 +7686,6 @@ function castSpell(spellId) {
     endTurn(); return;
   }
   if (spell.id === 'blink') { if (!paySpellCost(spell)) { log('Not enough mana.'); return; } blinkPlayer(5); endTurn(); return; }
-  if (spell.id === 'teleport') { if (!paySpellCost(spell)) { log('Not enough mana.'); return; } blinkPlayer(30); endTurn(); return; }
   if (spell.type === 'transmute') {
     const mat = player.inventory.find(i => i.type === 'material');
     if (!mat) { log('You have no crafting materials to transmute.'); return; }
@@ -7673,6 +7798,7 @@ function newPlayer() {
     buffs: {}, statusPoison: 0, statusFear: 0, statusConfuse: 0, alive: true, kind: 'player', name: 'You',
     allies: [], companions: [], quests: [], killCounts: {}, spouse: null, kids: 0, children: [], lastChildTurn: -9999,
     invFilter: 'all', invPage: 0, bounties: {}, scenario: null, waypoints: [], discoveredKingdoms: [],
+    knownSettlements: [], knownDungeons: [], customNames: {},
   };
 }
 
@@ -7889,6 +8015,10 @@ function generateDungeonLevel(theme, depth, maxDepth) {
     const bc = down;
     const boss = makeMonster(choice(rng, bossPool), Math.max(1,bc.x-1), bc.y, depth+2, rng);
     level.monsters.push(boss);
+    if (maxDepth >= 6) {
+      grid[down.y][down.x] = { glyph: '\u2666', walkable: true, color: '#e8ab52', bg: '#1a140a', feature: 'waystone' };
+      level.hasWaystone = true;
+    }
   }
   const itemCount = 3 + Math.floor(depth * 1.2);
   const baseIds = ITEM_BASES.filter(b => b.type !== 'misc' && b.type !== 'chest' && b.type !== 'corpse').map(b => b.id);
@@ -8094,6 +8224,7 @@ function endTurn() {
   if (turnCount % regenInterval === 0) { player.hp = Math.min(player.maxHp, player.hp + 1); player.mp = Math.min(player.maxMp, player.mp + 1); }
   if (turnCount % 300 === 0) decayBounties();
   checkKingdomDiscovery();
+  checkFastTravelDiscovery();
 
   for (const a of curAllies().slice()) allyAI(a);
   for (const m of curMonsters().slice()) { if (m.alive) monsterAI(m); }
@@ -8219,6 +8350,8 @@ function useItem(it) {
     player.inventory = player.inventory.filter(i => i.uid !== it.uid);
     updateSidebar(); return;
   }
+  if (it.effect === 'placewaypoint') { plantWaystoneShard(it); return; }
+  if (it.effect === 'recall') { beginBypassTravel({ type: 'item', item: it }); return; }
   if (it.type !== 'consumable' && it.type !== 'scroll') { log("You can't use that directly. Try equipping it."); return; }
   let consumed = true;
   switch (it.effect) {
@@ -8291,7 +8424,9 @@ function describeItem(it) {
     const eff = { heal:'Restores HP', mana:'Restores MP', buffstr:'Temporarily boosts Strength', poison:'Poisons you (bad idea to drink!)',
       food:'A simple food ration', identify:'Reveals hidden information', teleport:'Teleports you a great distance',
       scrollfire:'Blasts the nearest foe with fire', buffregen:'Grants regeneration over time', cureposion:'Cures poison',
-      throwdmg:'Thrown weapon — damages the nearest foe', escape:'Blinks you away and grants brief invisibility' }[it.effect];
+      throwdmg:'Thrown weapon — damages the nearest foe', escape:'Blinks you away and grants brief invisibility',
+      placewaypoint:'Plants a permanent, nameable waystone at your feet, linking it to your travel network',
+      recall:'Opens the waystone network from anywhere — even inside a dungeon — consumed once you travel' }[it.effect];
     lines.push(eff || 'A consumable item.');
   } else if (it.type === 'material') {
     lines.push('Crafting/cooking ingredient.');
@@ -8429,7 +8564,7 @@ function applyLoadedSave(data) {
   SEED = data.seed;
   turnCount = data.turnCount || 0;
   zoomIndex = (data.zoomIndex !== undefined) ? data.zoomIndex : 2;
-  player = data.player;
+  player = Object.assign(newPlayer(), data.player);
   // recover dungeon state if the player was mid-dungeon when saved
   if (player.mode === 'dungeon' && player.dungeonId) {
     const parts = player.dungeonId.split('_');
@@ -8569,12 +8704,12 @@ function showCreateStats() {
     html += `<div class="modal-opt" onclick="simulateKey('${i+1}')">[${i+1}] ${label}: ${10+d.statAdds[k]} <span class="dim">(+1 for 1 point)</span></div>`;
   });
   html += `<div class="modal-opt" onclick="simulateKey('<')" style="margin-top:6px">[&lt;] Back: choose a different path</div>`;
-  html += `<div class="modal-opt" onclick="simulateKey('n')">[n] Next: choose starting abilities →</div>`;
-  renderModal('Create Character — Attributes', html, 'Press 1-5 to add a point, &lt; to go back, n to continue.');
+  html += `<div class="modal-opt" onclick="simulateKey('Enter')">[Enter] Next: choose starting abilities →</div>`;
+  renderModal('Create Character — Attributes', html, 'Press 1-5 to add a point, &lt; to go back, Enter to continue.');
 }
 function createStatsKey(key) {
   const d = creationDraft;
-  if (key === 'n') { showCreateAbilities(); return; }
+  if (key === 'Enter') { showCreateAbilities(); return; }
   if (key === '<') { showArchetypePicker(); return; }
   const keys = ['str','dex','int','con','wis'];
   const idx = parseInt(key,10) - 1;
@@ -8621,12 +8756,12 @@ function showCreateAbilities() {
     html += `<div class="dim" style="margin-top:4px">Page ${d.abilityPage+1}/${totalPages} &nbsp; <span style="cursor:pointer;color:var(--amber)" onclick="simulateKey('[')">[prev]</span> <span style="cursor:pointer;color:var(--amber)" onclick="simulateKey(']')">[next]</span></div>`;
   }
   html += `<div class="modal-opt" onclick="simulateKey('<')" style="margin-top:6px">[&lt;] Back: attributes</div>`;
-  html += `<div class="modal-opt" onclick="simulateKey('n')">[n] Next: gold &amp; equipment →</div>`;
-  renderModal('Create Character — Abilities', html, 'Press 1-4 to switch category, letter/click to toggle, [ / ] to page, &lt; to go back, n to continue.');
+  html += `<div class="modal-opt" onclick="simulateKey('Enter')">[Enter] Next: gold &amp; equipment →</div>`;
+  renderModal('Create Character — Abilities', html, 'Press 1-4 to switch category, letter/click to toggle, [ / ] to page, &lt; to go back, Enter to continue.');
 }
 function createAbilitiesKey(key) {
   const d = creationDraft;
-  if (key === 'n') { showCreateFinal(); return; }
+  if (key === 'Enter') { showCreateFinal(); return; }
   if (key === '<') { showCreateStats(); return; }
   if (/^[1-4]$/.test(key)) { d.abilityCat = CREATION_ABILITY_CATS[parseInt(key,10)-1].key; d.abilityPage = 0; showCreateAbilities(); return; }
   if (key === '[') { if (d.abilityPage > 0) { d.abilityPage--; showCreateAbilities(); } return; }
@@ -8665,12 +8800,12 @@ function showCreateFinal() {
     html += `<div class="dim" style="margin-top:4px">Page ${d.itemPage+1}/${totalPages} &nbsp; <span style="cursor:pointer;color:var(--amber)" onclick="simulateKey('[')">[prev]</span> <span style="cursor:pointer;color:var(--amber)" onclick="simulateKey(']')">[next]</span></div>`;
   }
   html += `<div class="modal-opt" onclick="simulateKey('<')" style="margin-top:6px">[&lt;] Back: abilities</div>`;
-  html += `<div class="modal-opt" onclick="simulateKey('n')">[n] Finish character creation →</div>`;
-  renderModal('Create Character — Gold &amp; Equipment', html, 'Letter/click to spend points, [ / ] to page, &lt; to go back, n to finish.');
+  html += `<div class="modal-opt" onclick="simulateKey('Enter')">[Enter] Finish character creation →</div>`;
+  renderModal('Create Character — Gold &amp; Equipment', html, 'Letter/click to spend points, [ / ] to page, &lt; to go back, Enter to finish.');
 }
 function createFinalKey(key) {
   const d = creationDraft;
-  if (key === 'n') { finishCustomCreation(); return; }
+  if (key === 'Enter') { finishCustomCreation(); return; }
   if (key === '<') { showCreateAbilities(); return; }
   if (key === 'g') { if (d.points < 1) { log('No points left.'); return; } d.points--; d.gold += CREATION_GOLD_PER_POINT; showCreateFinal(); return; }
   if (key === '[') { if (d.itemPage > 0) { d.itemPage--; showCreateFinal(); } return; }
@@ -8820,8 +8955,10 @@ const GUIDE_SECTIONS = [
     <div class="modal-opt">Arrows / WASD / hjkl (+ yubn diagonals) — move, or attack if a hostile is adjacent. Bumping a
     friendly ally/companion/NPC swaps places with them instead of blocking you; use <b>t</b> to deliberately talk.</div>
     <div class="modal-opt">+ / − or mouse wheel — zoom. g — pick up/open chest. . or 5 — wait. r — rest.</div>
-    <div class="modal-opt"><b>V</b> fast-travel (instant) to any discovered settlement/dungeon/waypoint. <b>m</b> marks
-    a named waypoint at your current spot. <b>G</b>/<b>H</b> auto-walk to danger/home respectively. <b>X</b> auto-explores.</div>` },
+    <div class="modal-opt"><b>V</b> opens Fast Travel to any settlement/dungeon/waypoint you've visited — free at a
+    waystone (in town, on a waypoint, or a dungeon exit-waystone), or via a Recall Stone/Teleport spell/Warp Relay
+    Implant/The Ninth Door mutation from anywhere. <b>m</b> plants a Waystone Shard as a named waypoint. <b>G</b>/<b>H</b> auto-walk to
+    danger/home respectively. <b>X</b> auto-explores.</div>` },
   { id:'combat', label:'Combat', html: () => `
     <div class="modal-opt">Melee: walk into a hostile. Ranged weapons: equip in Hand, press <b>f</b> to fire at range.</div>
     <div class="modal-opt">Hit chance scales with relative DEX; damage = weapon/technique dice + STR bonus − target Armor,
@@ -8956,9 +9093,9 @@ function handleKey(e) {
 
   if (gameState === 'mainmenu') { if (/^[a-z]$/.test(key)) mainMenuChoice(key); return; }
   if (gameState === 'create_archetype') { if (key === '<' || /^[a-z]$/.test(key)) archetypeChoice(key); return; }
-  if (gameState === 'create_stats') { if (key === 'n' || key === '<' || /^[1-5]$/.test(key)) createStatsKey(key); return; }
-  if (gameState === 'create_abilities') { if (key === 'n' || key === '<' || key === '[' || key === ']' || /^[1-4]$/.test(key) || /^[a-z]$/.test(key)) createAbilitiesKey(key); return; }
-  if (gameState === 'create_final') { if (key === 'n' || key === 'g' || key === '<' || key === '[' || key === ']' || /^[a-z]$/.test(key)) createFinalKey(key); return; }
+  if (gameState === 'create_stats') { if (key === 'Enter' || key === '<' || /^[1-5]$/.test(key)) createStatsKey(key); return; }
+  if (gameState === 'create_abilities') { if (key === 'Enter' || key === '<' || key === '[' || key === ']' || /^[1-4]$/.test(key) || /^[a-z]$/.test(key)) createAbilitiesKey(key); return; }
+  if (gameState === 'create_final') { if (key === 'Enter' || key === 'g' || key === '<' || key === '[' || key === ']' || /^[a-z]$/.test(key)) createFinalKey(key); return; }
   if (gameState === 'start') { if (/^[a-z]$/.test(key)) beginScenario(key); return; }
 
   if (autoRunActive && gameState === 'playing') { autoRunActive = false; log('Auto-action interrupted.'); return; }
@@ -9010,7 +9147,7 @@ function handleKey(e) {
     return;
   }
   if (gameState === 'travel') {
-    if (key === 'Escape') { gameState = 'playing'; closeModal(); return; }
+    if (key === 'Escape') { gameState = 'playing'; closeModal(); pendingTravelBypass = null; return; }
     if (/^[a-z]$/.test(key)) { confirmTravel(key); return; }
     return;
   }
