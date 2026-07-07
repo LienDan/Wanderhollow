@@ -4188,7 +4188,15 @@ function pickUp() {
   const real = items.find(i => i.type !== 'corpse');
   if (!real) { log('There is a corpse here. (Some spells can make use of it.)'); return; }
   if (real.id === 'gold') { player.gold += (real.amount || 1); log(`You pick up ${real.amount || 1} gold.`); }
-  else { player.inventory.push(real); log(`You pick up ${real.name}${real.amount>1?` x${real.amount}`:''}.`); }
+  else {
+    const qty = real.amount || 1;
+    // Weapons/armor/chests are never merged (each can have its own mods/tier), everything else stacks by id.
+    const stackable = real.type !== 'weapon' && real.type !== 'armor' && real.type !== 'chest';
+    const existing = stackable ? player.inventory.find(i => i.id === real.id) : null;
+    if (existing) { existing.amount = (existing.amount || 1) + qty; }
+    else { real.amount = qty; player.inventory.push(real); }
+    log(`You pick up ${real.name}${qty>1?` x${qty}`:''}.`);
+  }
   removeItemAt(player.x, player.y, real.uid);
   updateSidebar();
   endTurn();
