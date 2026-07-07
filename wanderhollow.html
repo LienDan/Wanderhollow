@@ -1036,12 +1036,33 @@ Object.assign(DUNGEON_THEMES, {
 });
 
 // ---- character creation costs & pools ----
-const CREATION_POINTS = 20;
+// v2: point budget raised from 20 to 24 so a hybrid build (e.g. a couple of spells/techniques
+// *plus* a mutation or an implant) fits comfortably alongside the stat spread of any premade
+// archetype, with room left over for starting gold/items. Every premade archetype's attribute +
+// ability package (the priciest is the Warrior at 12pts, Necromancer at 11pts) still costs well
+// under the budget, so it remains fully recreatable with points to spare for gold/equipment.
+const CREATION_POINTS = 24;
 const CREATION_SPELL_COST = (spell) => Math.max(1, Math.round((spell.mp || 8) / 4));
 const CREATION_TECHNIQUE_COST = (tech) => Math.max(1, Math.round((tech.mp || 8) / 4));
+// Eldritch mutations: cost scales with how much Corruption they'd normally require to unlock,
+// since a deeper mutation represents a bigger, stranger departure from baseline humanity.
+const CREATION_MUTATION_COST = (mut) => Math.max(1, Math.round((mut.corruptionReq || 0) / 10) + 1);
+// Cybernetics: passive implants are a flat mid-cost (they're permanent, always-on bonuses);
+// active ones scale with their Charge cost, same logic as spells/techniques scaling with mp.
+const CREATION_CYBER_COST = (cyber) => cyber.activation === 'passive' ? 3 : Math.max(1, Math.round((cyber.mp || 16) / 4));
 const CREATION_STAT_COST = 1; // per +1 to a stat
 const CREATION_GOLD_PER_POINT = 25;
 const CREATION_STARTING_ITEM_POOL = ITEM_BASES.filter(b => ['weapon','armor'].includes(b.type) && (b.value||0) <= 40);
+// Custom creation mirrors the game's own cybernetic-slot limit (3 to start) so a fresh custom
+// character can't out-implant what an in-progress character could achieve without talents.
+const CREATION_MAX_STARTING_CYBER = 3;
+// The four ability categories selectable during custom creation, each a full point-buy pool.
+const CREATION_ABILITY_CATS = [
+  { key:'spells', label:'Spells', pool: () => SPELLS.filter(s => (s.mp||8) <= 12), costFn: CREATION_SPELL_COST, tagOf: (a) => a.school },
+  { key:'techniques', label:'Techniques', pool: () => TECHNIQUES, costFn: CREATION_TECHNIQUE_COST, tagOf: (a) => a.school },
+  { key:'eldritch', label:'Eldritch Mutations', pool: () => MUTATIONS, costFn: CREATION_MUTATION_COST, tagOf: (a) => a.category },
+  { key:'cyber', label:'Cyberware', pool: () => CYBERNETICS, costFn: CREATION_CYBER_COST, tagOf: (a) => a.category },
+];
 
 // ---- settlement flavors: layered on top of the existing hamlet/village/town/city size tiers ----
 // (adds variety of purpose/decoration without re-engineering the tested size/layout system)
@@ -4071,6 +4092,9 @@ function openItemAction(it, slot) {
     if (it.type === 'consumable' || it.type === 'scroll') opts.push(['u', 'Use']);
     if (it.type === 'chest') opts.push(['u', 'Open']);
     if (it.type === 'recipe') opts.push(['u', 'Learn']);
+    if (it.type === 'tome') opts.push(['u', 'Study (learn spell)']);
+    if (it.type === 'cyberchip') opts.push(['u', 'Extract (learn blueprint)']);
+    if (it.type === 'mutagen') opts.push(['u', 'Drink']);
     opts.push(['d', 'Drop']);
   }
   opts.push(['x', 'Cancel']);
@@ -8467,12 +8491,14 @@ function showArchetypePicker() {
   });
   const customLetter = String.fromCharCode(97 + ARCHETYPES.length);
   html += `<div class="modal-opt" onclick="simulateKey('${customLetter}')">[${customLetter}] <b>Custom</b> — build your own from scratch with a point-buy system.</div>`;
-  renderModal('Choose Your Path', html, 'Letter/click to choose.');
+  html += `<div class="modal-opt" onclick="simulateKey('<')" style="margin-top:6px">[&lt;] Back to Main Menu</div>`;
+  renderModal('Choose Your Path', html, 'Letter/click to choose, &lt; to go back.');
 }
 function archetypeChoice(letter) {
+  if (letter === '<') { showMainMenu(); return; }
   const idx = letter.charCodeAt(0) - 97;
   player = newPlayer();
-  if (idx === ARCHETYPES.length) { creationDraft = { points: CREATION_POINTS, statAdds:{str:0,dex:0,int:0,con:0,wis:0}, abilities:[], gold:0, items:[] }; showCreateStats(); return; }
+  if (idx === ARCHETYPES.length) { creationDraft = { points: CREATION_POINTS, statAdds:{str:0,dex:0,int:0,con:0,wis:0}, abilities:[], abilityCat:'spells', gold:0, items:[] }; showCreateStats(); return; }
   const arch = ARCHETYPES[idx];
   if (!arch) return;
   arch.apply();
@@ -8487,12 +8513,14 @@ function showCreateStats() {
   stats.forEach(([k,label], i) => {
     html += `<div class="modal-opt" onclick="simulateKey('${i+1}')">[${i+1}] ${label}: ${10+d.statAdds[k]} <span class="dim">(+1 for 1 point)</span></div>`;
   });
+  html += `<div class="modal-opt" onclick="simulateKey('<')" style="margin-top:6px">[&lt;] Back: choose a different path</div>`;
   html += `<div class="modal-opt" onclick="simulateKey('n')">[n] Next: choose starting abilities →</div>`;
-  renderModal('Create Character — Attributes', html, 'Press 1-5 to add a point, n to continue.');
+  renderModal('Create Character — Attributes', html, 'Press 1-5 to add a point, &lt; to go back, n to continue.');
 }
 function createStatsKey(key) {
   const d = creationDraft;
   if (key === 'n') { showCreateAbilities(); return; }
+  if (key === '<') { showArchetypePicker(); return; }
   const keys = ['str','dex','int','con','wis'];
   const idx = parseInt(key,10) - 1;
   const k = keys[idx];
@@ -8500,42 +8528,57 @@ function createStatsKey(key) {
   d.statAdds[k]++; d.points--;
   showCreateStats();
 }
+let createAbilityListCache = [];
 function showCreateAbilities() {
   gameState = 'create_abilities';
   const d = creationDraft;
+  if (!d.abilityCat) d.abilityCat = 'spells';
+  const cat = CREATION_ABILITY_CATS.find(c => c.key === d.abilityCat) || CREATION_ABILITY_CATS[0];
+  const list = cat.pool();
+  createAbilityListCache = list;
   let html = `<div class="npcline">Points remaining: ${d.points}</div>`;
-  html += `<div class="trade-col-title">Spells (from your budding magical training)</div>`;
-  const cheapSpells = SPELLS.filter(s => (s.mp||8) <= 12).slice(0, 20);
-  cheapSpells.forEach((s, i) => {
-    const cost = CREATION_SPELL_COST(s);
-    const has = d.abilities.includes(s.id);
+  html += `<div class="trade-col-title">Category</div><div style="margin-bottom:6px">`;
+  CREATION_ABILITY_CATS.forEach((c, i) => {
+    const active = c.key === d.abilityCat;
+    const count = d.abilities.filter(id => c.pool().some(a => a.id === id)).length;
+    html += `<span class="modal-opt" style="display:inline-block;margin-right:10px;${active ? 'color:var(--amber-bright);font-weight:bold;text-decoration:underline;' : ''}" onclick="simulateKey('${i+1}')">[${i+1}] ${c.label}${count?` (${count})`:''}</span>`;
+  });
+  html += `</div>`;
+  if (cat.key === 'cyber') {
+    const chosen = d.abilities.filter(id => CYBERNETICS.some(c2 => c2.id === id)).length;
+    html += `<div class="npcline dim">Starting implant slots used: ${chosen}/${CREATION_MAX_STARTING_CYBER}</div>`;
+  }
+  html += `<div class="trade-col-title">${cat.label}</div>`;
+  list.forEach((a, i) => {
+    const cost = cat.costFn(a);
+    const has = d.abilities.includes(a.id);
     const letter = String.fromCharCode(97 + i);
-    html += `<div class="modal-opt" onclick="simulateKey('${letter}')" style="${has?'color:#7fd07f':''}">[${letter}] ${has?'✓ ':''}${s.name} <span class="dim">(${cost}pt, ${s.school})</span></div>`;
+    const tag = cat.tagOf(a) || '';
+    const reqNote = (cat.key === 'eldritch' && a.corruptionReq) ? `, normally needs ${a.corruptionReq} Corruption` : '';
+    html += `<div class="modal-opt" onclick="simulateKey('${letter}')" style="${has?'color:#7fd07f':''}">[${letter}] ${has?'✓ ':''}${a.name} <span class="dim">(${cost}pt${tag?', '+tag:''}${reqNote})</span></div>`;
   });
-  html += `<div class="trade-col-title">Techniques (martial training, no mana needed)</div>`;
-  const offset = cheapSpells.length;
-  TECHNIQUES.slice(0, 20).forEach((t, i) => {
-    const cost = CREATION_TECHNIQUE_COST(t);
-    const has = d.abilities.includes(t.id);
-    const letter = String.fromCharCode(97 + offset + i);
-    html += `<div class="modal-opt" onclick="simulateKey('${letter}')" style="${has?'color:#7fd07f':''}">[${letter}] ${has?'✓ ':''}${t.name} <span class="dim">(${cost}pt, ${t.school})</span></div>`;
-  });
-  html += `<div class="modal-opt" onclick="simulateKey('n')" style="margin-top:6px">[n] Next: gold &amp; equipment →</div>`;
-  createAbilityListCache = [...cheapSpells, ...TECHNIQUES.slice(0,20)];
-  renderModal('Create Character — Abilities', html, 'Letter/click to toggle. n to continue.');
+  html += `<div class="modal-opt" onclick="simulateKey('<')" style="margin-top:6px">[&lt;] Back: attributes</div>`;
+  html += `<div class="modal-opt" onclick="simulateKey('n')">[n] Next: gold &amp; equipment →</div>`;
+  renderModal('Create Character — Abilities', html, 'Press 1-4 to switch category, letter/click to toggle, &lt; to go back, n to continue.');
 }
-let createAbilityListCache = [];
 function createAbilitiesKey(key) {
   const d = creationDraft;
   if (key === 'n') { showCreateFinal(); return; }
+  if (key === '<') { showCreateStats(); return; }
+  if (/^[1-4]$/.test(key)) { d.abilityCat = CREATION_ABILITY_CATS[parseInt(key,10)-1].key; showCreateAbilities(); return; }
   if (!/^[a-z]$/.test(key)) return;
   const idx = key.charCodeAt(0) - 97;
   const a = createAbilityListCache[idx];
   if (!a) return;
-  const isSpell = SPELLS.includes(a);
-  const cost = isSpell ? CREATION_SPELL_COST(a) : CREATION_TECHNIQUE_COST(a);
-  if (d.abilities.includes(a.id)) { d.abilities = d.abilities.filter(x => x !== a.id); d.points += cost; }
-  else { if (d.points < cost) { log("Not enough points."); return; } d.points -= cost; d.abilities.push(a.id); }
+  const cat = CREATION_ABILITY_CATS.find(c => c.key === d.abilityCat);
+  const cost = cat.costFn(a);
+  if (d.abilities.includes(a.id)) { d.abilities = d.abilities.filter(x => x !== a.id); d.points += cost; showCreateAbilities(); return; }
+  if (cat.key === 'cyber') {
+    const chosen = d.abilities.filter(id => CYBERNETICS.some(c2 => c2.id === id)).length;
+    if (chosen >= CREATION_MAX_STARTING_CYBER) { log(`You can only start with up to ${CREATION_MAX_STARTING_CYBER} implants (your cybernetic slots) — more slots open up later via talents.`); return; }
+  }
+  if (d.points < cost) { log('Not enough points.'); return; }
+  d.points -= cost; d.abilities.push(a.id);
   showCreateAbilities();
 }
 function showCreateFinal() {
@@ -8549,12 +8592,14 @@ function showCreateFinal() {
     const have = d.items.filter(x => x === b.id).length;
     html += `<div class="modal-opt" onclick="simulateKey('${letter}')">[${letter}] ${b.name}${have?` (x${have})`:''} <span class="dim">(3pt)</span></div>`;
   });
-  html += `<div class="modal-opt" onclick="simulateKey('n')" style="margin-top:6px">[n] Finish character creation →</div>`;
-  renderModal('Create Character — Gold &amp; Equipment', html, 'Letter/click to spend points. n to finish.');
+  html += `<div class="modal-opt" onclick="simulateKey('<')" style="margin-top:6px">[&lt;] Back: abilities</div>`;
+  html += `<div class="modal-opt" onclick="simulateKey('n')">[n] Finish character creation →</div>`;
+  renderModal('Create Character — Gold &amp; Equipment', html, 'Letter/click to spend points, &lt; to go back, n to finish.');
 }
 function createFinalKey(key) {
   const d = creationDraft;
   if (key === 'n') { finishCustomCreation(); return; }
+  if (key === '<') { showCreateAbilities(); return; }
   if (key === 'g') { if (d.points < 1) { log('No points left.'); return; } d.points--; d.gold += CREATION_GOLD_PER_POINT; showCreateFinal(); return; }
   if (!/^[a-z]$/.test(key)) return;
   const idx = key.charCodeAt(0) - 97;
@@ -8569,10 +8614,31 @@ function finishCustomCreation() {
   player.str += d.statAdds.str; player.dex += d.statAdds.dex; player.int += d.statAdds.int; player.con += d.statAdds.con; player.wis += d.statAdds.wis;
   player.maxHp += d.statAdds.con * 3; player.hp = player.maxHp;
   player.maxMp += d.statAdds.int * 3; player.mp = player.maxMp;
+  let maxMutationReq = -1;
   d.abilities.forEach(id => {
-    if (SPELLS.some(s => s.id === id)) { if (!player.knownSpells.includes(id)) player.knownSpells.push(id); }
-    else if (TECHNIQUES.some(t => t.id === id)) { if (!player.knownTechniques.includes(id)) player.knownTechniques.push(id); }
+    if (SPELLS.some(s => s.id === id)) {
+      if (!player.knownSpells.includes(id)) player.knownSpells.push(id);
+    } else if (TECHNIQUES.some(t => t.id === id)) {
+      if (!player.knownTechniques.includes(id)) player.knownTechniques.push(id);
+    } else if (MUTATIONS.some(m => m.id === id)) {
+      const m = MUTATIONS.find(x => x.id === id);
+      if (!player.mutations.includes(id)) {
+        player.mutations.push(id);
+        if (m.activation === 'passive' && m.apply) m.apply();
+      }
+      maxMutationReq = Math.max(maxMutationReq, m.corruptionReq || 0);
+    } else if (CYBERNETICS.some(c => c.id === id)) {
+      const c = CYBERNETICS.find(x => x.id === id);
+      if (!player.knownCyberIds.includes(id)) player.knownCyberIds.push(id);
+      if (!player.installedCyber.includes(id)) {
+        player.installedCyber.push(id);
+        if (c.activation === 'passive' && c.apply) c.apply();
+      }
+    }
   });
+  // Picking any mutation means you've already brushed against the eldritch — set Corruption high
+  // enough to justify it (with a small buffer), same spirit as the Occultist archetype's head start.
+  if (maxMutationReq >= 0) player.corruption = Math.min(100, Math.max(player.corruption, maxMutationReq + 10));
   player.gold += d.gold;
   d.items.forEach(baseId => { player.inventory.push(makeItem(baseId, 0, Math.random)); });
   player.scenario = 'custom';
@@ -8664,8 +8730,15 @@ function generateMutationGuideHTML() {
 const GUIDE_SECTIONS = [
   { id:'start', label:'Start', html: () => `
     <div class="modal-opt">New games begin with a character creator: pick a ready-made archetype (Warrior, Mage, Rogue,
-    Ranger, Necromancer, Cyber-Adept, Occultist) for a quick start, or Custom to allocate points yourself across
-    attributes, starting spells/techniques, and gold/equipment.</div>
+    Ranger, Necromancer, Cyber-Adept, Occultist) for a quick start, or Custom to build your own from a
+    ${CREATION_POINTS}-point budget.</div>
+    <div class="modal-opt">Custom creation has three steps — Attributes, Abilities, then Gold &amp; Equipment — and you
+    can freely move <b>[&lt;] Back</b> to an earlier step at any point to change your mind; nothing you've already
+    chosen is lost while you do. On the Abilities step, press <b>1-4</b> (or click the tabs) to switch between four
+    full ability pools: Spells, Techniques, Eldritch Mutations, and Cyberware — so a custom character can pick up
+    mutations or cybernetic implants right from the start, just like the Occultist and Cyber-Adept archetypes (implants
+    are capped at ${CREATION_MAX_STARTING_CYBER} to start, matching your normal cybernetic slot limit). Every premade
+    archetype's attribute and ability spread can be fully recreated in Custom, with points to spare for gold or gear.</div>
     ${generateScenarioGuideHTML()}
     <div class="modal-opt" style="margin-top:6px">From the main menu you can also Continue a saved game, or start fresh.
     Saving/loading uses your browser's local storage (or an exported file) — see the Meta tab.</div>` },
@@ -8749,6 +8822,11 @@ const GUIDE_SECTIONS = [
     <div class="modal-opt">Every menu option is clickable. Click any visible map tile to examine it (including loose
     items — full stats shown, not just the ground biome). Scroll the mouse wheel over the map to zoom.</div>` },
   { id:'meta', label:'Meta', html: () => `
+    <div class="modal-opt"><b>Changelog:</b> Custom character creation now lets you step <b>[&lt;] Back</b> to any
+    earlier stage without losing your picks, and adds Eldritch Mutations and Cyberware as two more point-buy ability
+    categories alongside Spells and Techniques (press 1-4 on the Abilities step to switch between them). The point
+    budget was raised from 20 to ${CREATION_POINTS} to comfortably fit hybrid builds — every premade archetype can
+    still be fully recreated in Custom with room to spare.</div>
     <div class="modal-opt">The compass now correctly points North "up" (screen convention), matching the map.</div>
     <div class="modal-opt">Saving uses your browser's local storage automatically when you choose Save (accessible via
     the pause/save menu, key <b>P</b>). If local storage isn't available, or you want a portable backup, Export writes
@@ -8803,10 +8881,10 @@ function handleKey(e) {
   const key = e.key;
 
   if (gameState === 'mainmenu') { if (/^[a-z]$/.test(key)) mainMenuChoice(key); return; }
-  if (gameState === 'create_archetype') { if (/^[a-z]$/.test(key)) archetypeChoice(key); return; }
-  if (gameState === 'create_stats') { if (key === 'n' || /^[1-5]$/.test(key)) createStatsKey(key); return; }
-  if (gameState === 'create_abilities') { if (key === 'n' || /^[a-z]$/.test(key)) createAbilitiesKey(key); return; }
-  if (gameState === 'create_final') { if (key === 'n' || key === 'g' || /^[a-z]$/.test(key)) createFinalKey(key); return; }
+  if (gameState === 'create_archetype') { if (key === '<' || /^[a-z]$/.test(key)) archetypeChoice(key); return; }
+  if (gameState === 'create_stats') { if (key === 'n' || key === '<' || /^[1-5]$/.test(key)) createStatsKey(key); return; }
+  if (gameState === 'create_abilities') { if (key === 'n' || key === '<' || /^[1-4]$/.test(key) || /^[a-z]$/.test(key)) createAbilitiesKey(key); return; }
+  if (gameState === 'create_final') { if (key === 'n' || key === 'g' || key === '<' || /^[a-z]$/.test(key)) createFinalKey(key); return; }
   if (gameState === 'start') { if (/^[a-z]$/.test(key)) beginScenario(key); return; }
 
   if (autoRunActive && gameState === 'playing') { autoRunActive = false; log('Auto-action interrupted.'); return; }
