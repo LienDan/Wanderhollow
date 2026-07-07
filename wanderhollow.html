@@ -144,6 +144,10 @@
       <div id="corruption-row" class="hidden">
         <div class="bar-text" id="corruption-text" style="color:#a03ac9">Corruption 0/100</div>
       </div>
+      <div id="status-row" class="hidden">
+        <h2>Status Effects</h2>
+        <div class="bar-text" id="status-list" style="line-height:1.7"></div>
+      </div>
       <div class="bar-text" id="level-text">Lv 1</div>
       <div class="bar-text" id="xp-text">XP 0/30</div>
       <div class="bar-text" id="gold-text">Gold: 40</div>
@@ -2680,6 +2684,26 @@ function hasLOS(x0, y0, x1, y1) {
 
 // ---------------- stats ----------------
 function getBuff(stat) { return player.buffs[stat] ? player.buffs[stat].power : 0; }
+const STATUS_LABELS = {
+  invis: () => 'Invisible',
+  armor: (p) => `Warded (${p>=0?'+':''}${p} armor)`,
+  regen: (p) => `Regenerating (+${p} HP/turn)`,
+  str: (p) => `${p>=0?'+':''}${p} STR`,
+  dex: (p) => `${p>=0?'+':''}${p} DEX`,
+  int: (p) => `${p>=0?'+':''}${p} INT`,
+};
+function getActiveStatusEffects() {
+  const out = [];
+  for (const stat in player.buffs) {
+    const b = player.buffs[stat];
+    const label = (STATUS_LABELS[stat] || ((p) => `${stat} (${p>=0?'+':''}${p})`))(b.power);
+    out.push({ label, turns: b.turns, kind: 'buff' });
+  }
+  if (player.statusPoison > 0) out.push({ label: 'Poisoned', turns: player.statusPoison, kind: 'debuff' });
+  if (player.statusFear > 0) out.push({ label: 'Afraid', turns: player.statusFear, kind: 'debuff' });
+  if (player.statusConfuse > 0) out.push({ label: 'Confused', turns: player.statusConfuse, kind: 'debuff' });
+  return out;
+}
 function applyBuff(stat, power, turns) { player.buffs[stat] = { power, turns }; log(`You feel the effects of ${stat === 'armor' ? 'a protective ward' : stat === 'regen' ? 'regeneration' : stat + ' magic'}.`); }
 function effStr(e) { return e === player ? player.str + getBuff('str') : e.str; }
 function effDex(e) { return e === player ? player.dex + getBuff('dex') : e.dex; }
@@ -3201,7 +3225,13 @@ function renderCharacterSheet() {
   for (const slot in eq) {
     html += `<div class="modal-opt dim">${slot}: ${eq[slot] ? eq[slot].name : '(empty)'}</div>`;
   }
-  html += `<div style="margin-top:6px">Total Armor: ${getArmorOf(player)}</div>`;
+  html += `<div style="margin-top:6px">Total Armor: ${getArmorOf(player)}</div><hr>`;
+  html += `<div>Status Effects:</div>`;
+  const effects = getActiveStatusEffects();
+  if (!effects.length) html += `<div class="modal-opt dim">(none active)</div>`;
+  effects.forEach(e => {
+    html += `<div class="modal-opt" style="${e.kind==='debuff'?'color:#e05a5a':'color:#5ae0d0'}">${e.label} <span class="dim">(${e.turns} turn${e.turns===1?'':'s'} left)</span></div>`;
+  });
   renderModal('Character Sheet', html, player.statPoints>0 ? 'Press 1-5 to spend a stat point. Esc to close.' : 'Esc to close.');
 }
 function spendStat(idx) {
@@ -5520,8 +5550,17 @@ function render() {
   for (const n of curNPCs()) { if (!n.alive) continue; drawG(n.x, n.y, '@', n.color); }
   for (const m of curMonsters()) { if (!m.alive) continue; drawG(m.x, m.y, m.glyph, m.color); }
   for (const a of curAllies()) drawG(a.x, a.y, a.glyph, '#5ae0ff');
-  ctx.fillStyle = '#fff';
-  ctx.fillText('@', v.halfW*v.ts+v.ts/2, v.halfH*v.ts+v.ts/2);
+  const playerPx = v.halfW*v.ts+v.ts/2, playerPy = v.halfH*v.ts+v.ts/2;
+  if (getBuff('invis') > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.45 + 0.15 * Math.sin(turnCount * 1.3);
+    ctx.fillStyle = '#8fd8ff';
+    ctx.fillText('@', playerPx, playerPy);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = '#fff';
+    ctx.fillText('@', playerPx, playerPy);
+  }
 
   updateSidebar();
 }
@@ -6191,7 +6230,7 @@ function npcAI(n) {
   }
   if (n.hostile) {
     let seesPlayer = dist <= 9 && hasLOS(n.x, n.y, player.x, player.y);
-    if (invisible && !n.engaged && dist > 1) seesPlayer = false;
+    if (invisible && dist > 1) { seesPlayer = false; n.engaged = false; }
     if (seesPlayer || n.engaged) {
       n.engaged = true;
       if (dist <= 1) doAttack(n, player); else if (dist <= 8) stepToward(n, player.x, player.y);
@@ -7716,7 +7755,7 @@ function monsterAI(m) {
   const vision = 9;
   const invisible = getBuff('invis') > 0;
   let seesPlayer = dist <= vision && hasLOS(m.x, m.y, player.x, player.y);
-  if (invisible && !m.engaged && dist > 1) seesPlayer = false;
+  if (invisible && dist > 1) { seesPlayer = false; m.engaged = false; }
   if (m.behavior === 'flee') {
     if (seesPlayer && dist < 6) stepAway(m, player.x, player.y); else wander(m);
     return;
@@ -8303,6 +8342,14 @@ function updateSidebar() {
     document.getElementById('charge-text').textContent = `Charge ${Math.round(player.charge)}/${player.maxCharge} · Slots ${player.installedCyber.length}/${player.cyberSlots}`;
     chargeRow.classList.remove('hidden');
   } else chargeRow.classList.add('hidden');
+  const statusRow = document.getElementById('status-row');
+  const effects = getActiveStatusEffects();
+  if (effects.length) {
+    document.getElementById('status-list').innerHTML = effects.map(e =>
+      `<span style="color:${e.kind==='debuff'?'#e05a5a':'#5ae0d0'}">${e.label}</span> <span class="dim">(${e.turns} turn${e.turns===1?'':'s'})</span>`
+    ).join('<br>');
+    statusRow.classList.remove('hidden');
+  } else statusRow.classList.add('hidden');
   const corruptionRow = document.getElementById('corruption-row');
   if (player.corruption > 0 || player.mutations.length) {
     document.getElementById('corruption-text').textContent = `Corruption ${Math.round(player.corruption)}/100 · Mutations ${player.mutations.length}`;
@@ -8537,13 +8584,18 @@ function createStatsKey(key) {
   showCreateStats();
 }
 let createAbilityListCache = [];
+const CREATION_PAGE_SIZE = 20;
 function showCreateAbilities() {
   gameState = 'create_abilities';
   const d = creationDraft;
   if (!d.abilityCat) d.abilityCat = 'spells';
+  if (!d.abilityPage) d.abilityPage = 0;
   const cat = CREATION_ABILITY_CATS.find(c => c.key === d.abilityCat) || CREATION_ABILITY_CATS[0];
   const list = cat.pool();
-  createAbilityListCache = list;
+  const totalPages = Math.max(1, Math.ceil(list.length / CREATION_PAGE_SIZE));
+  if (d.abilityPage >= totalPages) d.abilityPage = totalPages - 1;
+  const pageItems = list.slice(d.abilityPage * CREATION_PAGE_SIZE, d.abilityPage * CREATION_PAGE_SIZE + CREATION_PAGE_SIZE);
+  createAbilityListCache = pageItems;
   let html = `<div class="npcline">Points remaining: ${d.points}</div>`;
   html += `<div class="trade-col-title">Category</div><div style="margin-bottom:6px">`;
   CREATION_ABILITY_CATS.forEach((c, i) => {
@@ -8556,8 +8608,8 @@ function showCreateAbilities() {
     const chosen = d.abilities.filter(id => CYBERNETICS.some(c2 => c2.id === id)).length;
     html += `<div class="npcline dim">Starting implant slots used: ${chosen}/${CREATION_MAX_STARTING_CYBER}</div>`;
   }
-  html += `<div class="trade-col-title">${cat.label}</div>`;
-  list.forEach((a, i) => {
+  html += `<div class="trade-col-title">${cat.label}${totalPages>1?` (page ${d.abilityPage+1}/${totalPages})`:''}</div>`;
+  pageItems.forEach((a, i) => {
     const cost = cat.costFn(a);
     const has = d.abilities.includes(a.id);
     const letter = String.fromCharCode(97 + i);
@@ -8565,15 +8617,20 @@ function showCreateAbilities() {
     const reqNote = (cat.key === 'eldritch' && a.corruptionReq) ? `, normally needs ${a.corruptionReq} Corruption` : '';
     html += `<div class="modal-opt" onclick="simulateKey('${letter}')" style="${has?'color:#7fd07f':''}">[${letter}] ${has?'✓ ':''}${a.name} <span class="dim">(${cost}pt${tag?', '+tag:''}${reqNote})</span></div>`;
   });
+  if (totalPages > 1) {
+    html += `<div class="dim" style="margin-top:4px">Page ${d.abilityPage+1}/${totalPages} &nbsp; <span style="cursor:pointer;color:var(--amber)" onclick="simulateKey('[')">[prev]</span> <span style="cursor:pointer;color:var(--amber)" onclick="simulateKey(']')">[next]</span></div>`;
+  }
   html += `<div class="modal-opt" onclick="simulateKey('<')" style="margin-top:6px">[&lt;] Back: attributes</div>`;
   html += `<div class="modal-opt" onclick="simulateKey('n')">[n] Next: gold &amp; equipment →</div>`;
-  renderModal('Create Character — Abilities', html, 'Press 1-4 to switch category, letter/click to toggle, &lt; to go back, n to continue.');
+  renderModal('Create Character — Abilities', html, 'Press 1-4 to switch category, letter/click to toggle, [ / ] to page, &lt; to go back, n to continue.');
 }
 function createAbilitiesKey(key) {
   const d = creationDraft;
   if (key === 'n') { showCreateFinal(); return; }
   if (key === '<') { showCreateStats(); return; }
-  if (/^[1-4]$/.test(key)) { d.abilityCat = CREATION_ABILITY_CATS[parseInt(key,10)-1].key; showCreateAbilities(); return; }
+  if (/^[1-4]$/.test(key)) { d.abilityCat = CREATION_ABILITY_CATS[parseInt(key,10)-1].key; d.abilityPage = 0; showCreateAbilities(); return; }
+  if (key === '[') { if (d.abilityPage > 0) { d.abilityPage--; showCreateAbilities(); } return; }
+  if (key === ']') { d.abilityPage = (d.abilityPage || 0) + 1; showCreateAbilities(); return; }
   if (!/^[a-z]$/.test(key)) return;
   const idx = key.charCodeAt(0) - 97;
   const a = createAbilityListCache[idx];
@@ -8592,25 +8649,34 @@ function createAbilitiesKey(key) {
 function showCreateFinal() {
   gameState = 'create_final';
   const d = creationDraft;
+  if (!d.itemPage) d.itemPage = 0;
+  const totalPages = Math.max(1, Math.ceil(CREATION_STARTING_ITEM_POOL.length / CREATION_PAGE_SIZE));
+  if (d.itemPage >= totalPages) d.itemPage = totalPages - 1;
+  const pageItems = CREATION_STARTING_ITEM_POOL.slice(d.itemPage * CREATION_PAGE_SIZE, d.itemPage * CREATION_PAGE_SIZE + CREATION_PAGE_SIZE);
   let html = `<div class="npcline">Points remaining: ${d.points} &nbsp; (1 point = ${CREATION_GOLD_PER_POINT}g, or spend 3 on a starting item)</div>`;
   html += `<div class="modal-opt" onclick="simulateKey('g')">[g] Convert 1 point → ${CREATION_GOLD_PER_POINT} gold (current bonus gold: ${d.gold})</div>`;
-  html += `<div class="trade-col-title">Starting Items (3 points each)</div>`;
-  CREATION_STARTING_ITEM_POOL.slice(0, 20).forEach((b, i) => {
+  html += `<div class="trade-col-title">Starting Items (3 points each)${totalPages>1?` (page ${d.itemPage+1}/${totalPages})`:''}</div>`;
+  pageItems.forEach((b, i) => {
     const letter = String.fromCharCode(97 + i);
     const have = d.items.filter(x => x === b.id).length;
     html += `<div class="modal-opt" onclick="simulateKey('${letter}')">[${letter}] ${b.name}${have?` (x${have})`:''} <span class="dim">(3pt)</span></div>`;
   });
+  if (totalPages > 1) {
+    html += `<div class="dim" style="margin-top:4px">Page ${d.itemPage+1}/${totalPages} &nbsp; <span style="cursor:pointer;color:var(--amber)" onclick="simulateKey('[')">[prev]</span> <span style="cursor:pointer;color:var(--amber)" onclick="simulateKey(']')">[next]</span></div>`;
+  }
   html += `<div class="modal-opt" onclick="simulateKey('<')" style="margin-top:6px">[&lt;] Back: abilities</div>`;
   html += `<div class="modal-opt" onclick="simulateKey('n')">[n] Finish character creation →</div>`;
-  renderModal('Create Character — Gold &amp; Equipment', html, 'Letter/click to spend points, &lt; to go back, n to finish.');
+  renderModal('Create Character — Gold &amp; Equipment', html, 'Letter/click to spend points, [ / ] to page, &lt; to go back, n to finish.');
 }
 function createFinalKey(key) {
   const d = creationDraft;
   if (key === 'n') { finishCustomCreation(); return; }
   if (key === '<') { showCreateAbilities(); return; }
   if (key === 'g') { if (d.points < 1) { log('No points left.'); return; } d.points--; d.gold += CREATION_GOLD_PER_POINT; showCreateFinal(); return; }
+  if (key === '[') { if (d.itemPage > 0) { d.itemPage--; showCreateFinal(); } return; }
+  if (key === ']') { d.itemPage = (d.itemPage || 0) + 1; showCreateFinal(); return; }
   if (!/^[a-z]$/.test(key)) return;
-  const idx = key.charCodeAt(0) - 97;
+  const idx = (d.itemPage || 0) * CREATION_PAGE_SIZE + (key.charCodeAt(0) - 97);
   const b = CREATION_STARTING_ITEM_POOL[idx];
   if (!b) return;
   if (d.points < 3) { log('Not enough points (items cost 3).'); return; }
@@ -8891,8 +8957,8 @@ function handleKey(e) {
   if (gameState === 'mainmenu') { if (/^[a-z]$/.test(key)) mainMenuChoice(key); return; }
   if (gameState === 'create_archetype') { if (key === '<' || /^[a-z]$/.test(key)) archetypeChoice(key); return; }
   if (gameState === 'create_stats') { if (key === 'n' || key === '<' || /^[1-5]$/.test(key)) createStatsKey(key); return; }
-  if (gameState === 'create_abilities') { if (key === 'n' || key === '<' || /^[1-4]$/.test(key) || /^[a-z]$/.test(key)) createAbilitiesKey(key); return; }
-  if (gameState === 'create_final') { if (key === 'n' || key === 'g' || key === '<' || /^[a-z]$/.test(key)) createFinalKey(key); return; }
+  if (gameState === 'create_abilities') { if (key === 'n' || key === '<' || key === '[' || key === ']' || /^[1-4]$/.test(key) || /^[a-z]$/.test(key)) createAbilitiesKey(key); return; }
+  if (gameState === 'create_final') { if (key === 'n' || key === 'g' || key === '<' || key === '[' || key === ']' || /^[a-z]$/.test(key)) createFinalKey(key); return; }
   if (gameState === 'start') { if (/^[a-z]$/.test(key)) beginScenario(key); return; }
 
   if (autoRunActive && gameState === 'playing') { autoRunActive = false; log('Auto-action interrupted.'); return; }
