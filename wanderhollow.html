@@ -2327,7 +2327,6 @@ const CREATION_MUTATION_COST = (mut) => Math.max(1, Math.round((mut.corruptionRe
 // Cybernetics: passive implants are a flat mid-cost (they're permanent, always-on bonuses);
 // active ones scale with their Charge cost, same logic as spells/techniques scaling with mp.
 const CREATION_CYBER_COST = (cyber) => cyber.activation === 'passive' ? 3 : Math.max(1, Math.round((cyber.mp || 16) / 4));
-const CREATION_STAT_COST = 1; // per +1 to a stat
 const CREATION_GOLD_PER_POINT = 25;
 const CREATION_STARTING_ITEM_POOL = ITEM_BASES.filter(b => ['weapon','armor'].includes(b.type) && (b.value||0) <= 40);
 // Custom creation mirrors the game's own cybernetic-slot limit (3 to start) so a fresh custom
@@ -2684,7 +2683,6 @@ function makeMonster(monsterId, x, y, depthScale, rng) {
 }
 
 // ---- Dungeon level generation ----
-const DW = 50, DH = 30;
 
 
 // ===================== WORLD GENERATION EXPANSION (overrides) =====================
@@ -3227,14 +3225,10 @@ function maybeSpawnOverworldBoss(chunk, cx, cy, centerBiome, rng) {
 }
 
 // ===================== GAME ENGINE =====================
-const TS = 16, VIEW_W = 51, VIEW_H = 31;
-const HALF_W = Math.floor(VIEW_W / 2), HALF_H = Math.floor(VIEW_H / 2);
-
 let canvas, ctx;
-let player, gameState, dialogueNPC, dialogueOptions, tradeMode, invSelected, statMenuOpen;
+let player, gameState, dialogueNPC, dialogueOptions, tradeMode, invSelected;
 let turnCount = 0;
 let logMessages = [];
-let restCounter = 0;
 
 
 function log(msg) {
@@ -3802,9 +3796,7 @@ const MOVE_KEYS = {
 
 // ---------------- init ----------------
 
-window.addEventListener('DOMContentLoaded', initGame);
 
-// ===================== ENGINE EXPANSION PACK (overrides + new systems) =====================
 
 // ---- player model v2 (adds new slots, allies, quests, recipes, talents, relationships) ----
 
@@ -3966,20 +3958,6 @@ function ascend() {
   relocateAllies();
   markSeen(); render();
 }
-
-// ---- talents ----
-const TALENTS = [
-  { id:'toughness', name:'Toughness', desc:'+15 Max HP', apply:()=>{ player.maxHp+=15; player.hp+=15; } },
-  { id:'archmind', name:'Arcane Reserves', desc:'+15 Max MP', apply:()=>{ player.maxMp+=15; player.mp+=15; } },
-  { id:'deadly', name:'Deadly Strikes', desc:'+8% critical hit chance', apply:()=>{ player.critBonus=(player.critBonus||0)+0.08; } },
-  { id:'ironskin', name:'Iron Skin', desc:'+3 Armor (innate)', apply:()=>{ player.talentArmor=(player.talentArmor||0)+3; } },
-  { id:'swift', name:'Swift Reflexes', desc:'+3 DEX', apply:()=>{ player.dex+=3; } },
-  { id:'mighty', name:'Mighty', desc:'+3 STR', apply:()=>{ player.str+=3; } },
-  { id:'scholar', name:'Scholar', desc:'+3 INT', apply:()=>{ player.int+=3; } },
-  { id:'necrobond', name:"Necromancer's Bond", desc:'Summoned/raised allies gain +30% HP', apply:()=>{ player.allyHpBonus=0.3; } },
-  { id:'scavenger', name:'Scavenger', desc:'+20% gold from all loot', apply:()=>{ player.goldBonus=0.2; } },
-  { id:'vitality', name:'Vitality', desc:'Natural HP/MP regeneration ticks twice as often', apply:()=>{ player.regenBonus=true; } },
-];
 
 // ---- final authoritative versions of combat/ally/loot helpers (apply talent bonuses) ----
 
@@ -4382,9 +4360,6 @@ function findAdjacentNPC() {
 function simulateKey(key) { handleKey({ key, preventDefault(){} }); }
 
 
-// ---- init v2: adds mouse support ----
-
-window.addEventListener('DOMContentLoaded', initGame);
 
 // ---- render v2: draws allies too ----
 
@@ -4679,9 +4654,6 @@ function render() {
 // ---- input v5: zoom keys + spellbook grouping fix ----
 
 
-// ---- init v4: zoom-aware canvas + mouse wheel zoom ----
-
-window.addEventListener('DOMContentLoaded', initGame);
 
 // ---- help v4: covers appearance, zoom, all magic schools, talent tree, water travel, relationships ----
 
@@ -5108,10 +5080,6 @@ function decayBounties() {
 // ---- input v7 (final): adds 'start' screen, 'spelltarget' selection, 'H' auto-travel-home ----
 
 
-// ---- init v5 / restart v2: routes through the starting-scenario screen ----
-
-
-window.addEventListener('DOMContentLoaded', initGame);
 
 // ---- guide v7: full documentary-style help, auto-generated from live data so it can't go stale ----
 function generateSpellGuideHTML() {
@@ -7342,7 +7310,8 @@ const GUIDE_SECTIONS = [
     throwables, and grenades) and ${ITEM_BASES.filter(b=>b.type==='scroll').length} scrolls, covering healing/mana,
     every stat buff, elemental resistances, invisibility, curse removal, area reveal, and thrown grenades (fire, frost,
     poison gas, EMP, caltrops/snares, mines) that land wherever the nearest enemy is standing rather than just around
-    you. ${ITEM_BASES.filter(b=>b.type==='material').length} crafting materials feed the Crafting screen (K).</div>` },
+    you. ${ITEM_BASES.filter(b=>b.type==='material').length} crafting materials feed the Crafting screen (K).</div>
+    ${generateItemGuideHTML()}` },
   { id:'magic', label:'Magic', html: () => `
     <div class="modal-opt">z opens your unified Abilities screen (spells, techniques, active cybernetics, active
     mutations together). ${SPELLS.length} spells across ${new Set(SPELLS.map(s=>s.school)).size} schools, spanning a real
@@ -7419,7 +7388,9 @@ const GUIDE_SECTIONS = [
     rarity variants — Weathered, Standard, Ancient, Corrupted, or Legendary — which meaningfully change its danger,
     loot quality, and miniboss odds (Legendary guarantees one). That's roughly ${Object.keys(DUNGEON_THEMES).length * 5}
     distinct dungeon experiences, not just ${Object.keys(DUNGEON_THEMES).length} reskins. The full roster of themes:</div>
-    ${generateDungeonThemeGuideHTML()}` },
+    ${generateDungeonThemeGuideHTML()}
+    <div class="modal-opt" style="margin-top:6px"><b>Rarity variants:</b></div>
+    ${generateDungeonVariantGuideHTML()}` },
   { id:'world', label:'World', html: () => `
     <div class="modal-opt">Settlements range from hamlets to rare walled cities, in over a dozen flavors — farming
     villages, fishing towns, mining settlements, garrisons, monasteries, trading posts, nomad camps, elven enclaves,
@@ -7428,6 +7399,10 @@ const GUIDE_SECTIONS = [
     and always shown on your status panel. Beyond settlements: over 30 kinds of camps, ruins, shipwrecks, shrines, and
     stranger sites litter the wilds. Rare, powerful overworld bosses (an ancient dragon, a yeti king, an elder treant,
     and more) roam fitting biomes — tread carefully.</div>` },
+  { id:'bestiary', label:'Bestiary', html: () => `
+    <div class="modal-opt">Dungeon-tier monsters and bosses, grouped by faction. Overworld wildlife (rabbits, wolves,
+    bears, and the like) isn't listed here — it spawns based on biome and is generally weaker than anything below.</div>
+    ${generateBestiaryGuideHTML()}` },
   { id:'mouse', label:'Mouse', html: () => `
     <div class="modal-opt">Every menu option is clickable. Click any visible map tile to examine it (including loose
     items — full stats shown, not just the ground biome). Scroll the mouse wheel over the map to zoom.</div>` },
