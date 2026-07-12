@@ -1866,7 +1866,7 @@ TALENTS_V2.push(
   { id:'treasurehunter', name:'Treasure Hunter', category:'survival', desc:'+25% more gold from loot', tier:3, requires:{level:10, talent:'goldenTouch'}, apply:()=>{ player.goldBonus=(player.goldBonus||0)+0.25; } },
   { id:'fastlearner', name:'Fast Learner', category:'survival', desc:'+15% more XP from all kills', tier:3, requires:{level:10, talent:'quickstudy'}, apply:()=>{ player.xpBonus=(player.xpBonus||0)+0.15; } },
   { id:'maddeningpresence', name:'Maddening Presence', category:'eldritch', desc:'Your eldritch attacks have a chance to confuse the target', tier:3, requires:{level:10, talent:'voidtouched'}, apply:()=>{ player.eldritchConfuseChance=(player.eldritchConfuseChance||0)+0.2; } },
-  { id:'trapmaster', name:'Trap Master', category:'survival', desc:'Immune to your own thrown/planted hazards; even less likely to trigger others', tier:3, requires:{level:10, talent:'trapsense'}, apply:()=>{ player.trapAvoidBonus=(player.trapAvoidBonus||0)+0.3; player.trapImmune=true; } },
+  { id:'trapmaster', name:'Trap Master', category:'survival', desc:'You never trigger hidden dungeon traps', tier:3, requires:{level:10, talent:'trapsense'}, apply:()=>{ player.trapAvoidBonus=(player.trapAvoidBonus||0)+0.3; player.trapImmune=true; } },
   // ---- tier 4: level 15 + prereq (capstones) ----
   { id:'legendarychef', name:'Legendary Chef', category:'cooking', desc:'All food effects are dramatically stronger and longer-lasting', tier:4, requires:{level:15, talent:'grandchef'}, apply:()=>{ player.cookingHealBonus=(player.cookingHealBonus||0)+0.4; player.cookingDurBonus=(player.cookingDurBonus||0)+0.4; } },
   { id:'grandmaster_alchemist', name:'Grandmaster Alchemist', category:'alchemy', desc:'+30% more potion potency; bombs deal +30% more damage', tier:4, requires:{level:15, talent:'grandalchemist'}, apply:()=>{ player.alchemyPotencyBonus=(player.alchemyPotencyBonus||0)+0.3; player.throwDmgBonus=(player.throwDmgBonus||0)+0.3; } },
@@ -3700,8 +3700,18 @@ function getActiveStatusEffects(e) {
   return out;
 }
 function applyBuff(stat, power, turns) { player.buffs[stat] = { power, turns }; log(`You feel the effects of ${stat === 'armor' ? 'a protective ward' : stat === 'regen' ? 'regeneration' : stat + ' magic'}.`); }
+function isPlayerInWater() {
+  if (curIsDungeon()) return false;
+  const t = curTileAt(player.x, player.y);
+  return !!(t && (t.feature === 'water' || t.biome === 'ocean'));
+}
 function effStr(e) { return e === player ? player.str + getBuff('str') : e.str; }
-function effDex(e) { return e === player ? player.dex + getBuff('dex') : e.dex; }
+function effDex(e) {
+  if (e !== player) return e.dex;
+  let d = player.dex + getBuff('dex');
+  if (player.waterDexBonus && isPlayerInWater()) d += player.waterDexBonus;
+  return d;
+}
 
 
 // ---------------- combat ----------------
@@ -4009,7 +4019,10 @@ function renderLog() {
 
 // ---------------- vision / seen tracking ----------------
 function markSeen() {
-  const radius = curIsDungeon() ? 8 : 10;
+  const inDungeon = curIsDungeon();
+  let radius = inDungeon ? 8 : 10;
+  radius += player.visionBonus || 0;
+  if (inDungeon && player.permaNightVision) radius += 3;
   for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
     if (dx*dx + dy*dy > radius*radius) continue;
     const wx = player.x + dx, wy = player.y + dy;
@@ -4567,6 +4580,7 @@ function pickUp() {
 function fireRangedWeapon() {
   const w = player.equipment.hand;
   if (!w || !w.ranged) { log('Equip a ranged weapon (bow, crossbow, sling, or wand) first.'); return; }
+  if (player.statusFear > 0) { log("You're too terrified to fight!"); endTurn(); return; }
   const t = nearestHostile(7);
   if (!t) { log('No target in range.'); return; }
   doAttack(player, t);
@@ -4963,14 +4977,14 @@ function completeQuest(q) {
   player.gold += q.rewardGold;
   gainXP(q.rewardXp);
   const giver = findNPCByUid(q.giverId);
-  if (giver) giver.affection = (giver.affection || 0) + 15;
+  if (giver) giver.affection = (giver.affection || 0) + Math.round(15 * (1 + (player.affectionBonus || 0)));
   Sound.play('questComplete');
   log(`*** Quest complete: ${q.desc} (+${q.rewardGold}g, +${q.rewardXp}xp${giver ? ', +15 affection' : ''}) ***`);
 }
 function giveGift(npc, item) {
   const base = Math.max(1, Math.round(item.value / 3));
   const dim = Math.floor((npc.giftCount || 0) / 3);
-  const inc = Math.max(1, base - dim);
+  const inc = Math.max(1, Math.round((base - dim) * (1 + (player.affectionBonus || 0))));
   npc.affection = (npc.affection || 0) + inc;
   npc.giftCount = (npc.giftCount || 0) + 1;
   player.inventory = player.inventory.filter(i => i.uid !== item.uid);
@@ -5405,7 +5419,7 @@ function openDialogue(npc) {
   const nextKey = () => String.fromCharCode(97 + (n++));
   const isSpouse = player.spouse && player.spouse.uid === npc.uid;
   opts.push({ key: nextKey(), label: isSpouse ? 'Chat' : 'Talk', action: () => {
-    const cooldown = 30;
+    const cooldown = Math.max(5, Math.round(30 * (1 - (player.affectionBonus || 0))));
     const lastTurn = (npc.lastTalkTurn === undefined || npc.lastTalkTurn === null) ? -9999 : npc.lastTalkTurn;
     const canGain = (turnCount - lastTurn) > cooldown;
     let line;
@@ -5971,7 +5985,7 @@ function paySpellCost(ability) {
 // ---- extended effect application: confuse status, blinklike (shared by phantom step / time skip /
 // cyber blink implants / mutation warp step), and environment destruction on fire-flagged abilities ----
 function applyEffectToTarget(spell, t) {
-  const dmgMult = 1 + (player.spellDmgBonus || 0) + (abilityPoolOf(spell.id) === 'technique' ? (player.techniqueDmgBonus || 0) : 0) + (abilityPoolOf(spell.id) === 'mutation' ? (player.mutationDmgBonus ? player.mutationDmgBonus/20 : 0) : 0);
+  const dmgMult = 1 + (player.spellDmgBonus || 0) + (abilityPoolOf(spell.id) === 'technique' ? (player.techniqueDmgBonus || 0) : 0) + (abilityPoolOf(spell.id) === 'mutation' ? (player.mutationDmgBonus ? player.mutationDmgBonus/20 : 0) + (player.eldritchDmgBonus || 0) : 0);
   if (spell.type === 'lifetap') {
     const dmg = Math.round(randInt(Math.random, spell.power[0], spell.power[1]) * dmgMult);
     t.hp -= dmg;
@@ -6250,6 +6264,8 @@ function doAttack(att, def) {
   if (!isPlayer && att.poison && def === player && getBuff('resistpoison') <= 0 && Math.random() < 0.4) { player.statusPoison = (player.statusPoison || 0) + (player.poisonDmgReduction ? Math.round(att.poison * (1-player.poisonDmgReduction)) : att.poison); log('You are poisoned!'); }
   if (!isPlayer && att.causesFear && def === player && Math.random() < 0.35) { player.statusFear = (player.statusFear || 0) + 3; log('Terror grips you!'); }
   if (!isPlayer && att.causesConfuse && def === player && Math.random() < 0.35) { player.statusConfuse = (player.statusConfuse || 0) + 3; log('Your mind reels in confusion!'); }
+  if (isPlayer && def !== player && (player.eldritchConfuseChance || 0) > 0 && Math.random() < player.eldritchConfuseChance) { def.statusConfuse = (def.statusConfuse || 0) + 3; log(`${def.name} reels in confusion at your unnatural touch!`); }
+  if (isPlayer && def !== player && (player.eldritchFearChance || 0) > 0 && Math.random() < player.eldritchFearChance) { def.statusFear = (def.statusFear || 0) + 3; log(`${def.name} recoils in primal terror!`); }
   if (def.hp <= 0) onDeath(def, att);
 }
 
@@ -6749,10 +6765,25 @@ function makeMutagen(rng) {
 function movePlayer(dx, dy) {
   if (gameState !== 'playing') return;
   floatingTexts = [];
+  const intendedTarget = entityAt(player.x + dx, player.y + dy);
+  const isAttackAttempt = intendedTarget && intendedTarget !== player && (intendedTarget.kind === 'monster' || (intendedTarget.kind === 'npc' && intendedTarget.hostile));
+  if (player.statusSlow > 0 && !isAttackAttempt && Math.random() < 0.5) {
+    log("You're too sluggish to move!");
+    endTurn(); return;
+  }
+  if (player.statusConfuse > 0 && Math.random() < 0.5) {
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+    const [rdx, rdy] = choice(Math.random, dirs);
+    log('You stumble in a random direction, confused!');
+    dx = rdx; dy = rdy;
+  }
   const nx = player.x + dx, ny = player.y + dy;
   const target = entityAt(nx, ny);
   if (target && target !== player) {
-    if (target.kind === 'monster' || (target.kind === 'npc' && target.hostile)) { doAttack(player, target); endTurn(); return; }
+    if (target.kind === 'monster' || (target.kind === 'npc' && target.hostile)) {
+      if (player.statusFear > 0) { log("You're too terrified to attack!"); endTurn(); return; }
+      doAttack(player, target); endTurn(); return;
+    }
     const tx = target.x, ty = target.y;
     target.x = player.x; target.y = player.y;
     player.x = tx; player.y = ty;
@@ -6765,7 +6796,7 @@ function movePlayer(dx, dy) {
     if (isWaterTile && !curIsDungeon()) {
       const hasRaft = player.inventory.some(i => i.id === 'raft');
       const flying = getBuff('flight') > 0;
-      if (hasRaft || flying || player.freeSwim || getBuff('waterbreathing') > 0) {
+      if (hasRaft || flying || player.freeSwim || player.permaWaterbreathing || getBuff('waterbreathing') > 0) {
         player.x = nx; player.y = ny;
         Sound.play('splash');
         log(hasRaft ? 'You paddle your raft across the water.' : flying ? 'You soar over the water.' : 'You swim easily across.');
@@ -6773,7 +6804,8 @@ function movePlayer(dx, dy) {
       }
       if ((player.stamina || 0) > 0) {
         player.x = nx; player.y = ny;
-        player.stamina = Math.max(0, player.stamina - 8);
+        const swimCost = Math.round(8 * (1 - (player.staminaDrainReduction || 0)));
+        player.stamina = Math.max(0, player.stamina - swimCost);
         Sound.play('splash');
         log(player.stamina > 20 ? 'You swim through the cold water.' : 'You are getting exhausted swimming!');
         endTurn(); return;
@@ -6802,11 +6834,15 @@ function movePlayer(dx, dy) {
   }
   if (curIsDungeon() && t.hiddenTrap && !t.trapTriggered) {
     t.trapTriggered = true; t.glyph = '^'; t.color = '#c93a3a';
-    const dmg = randInt(Math.random, 4, 11);
-    player.hp -= dmg;
-    Sound.play('trap');
-    log(`A hidden trap triggers! You take ${dmg} damage.`);
-    if (player.hp <= 0) { onDeath(player, null); return; }
+    if (player.trapImmune || Math.random() < (player.trapAvoidBonus || 0)) {
+      log('You spot a hidden trap just in time and step around it!');
+    } else {
+      const dmg = randInt(Math.random, 4, 11);
+      player.hp -= dmg;
+      Sound.play('trap');
+      log(`A hidden trap triggers! You take ${dmg} damage.`);
+      if (player.hp <= 0) { onDeath(player, null); return; }
+    }
   }
   if (curIsDungeon() && t.feature === 'poisongas') {
     player.statusPoison = (player.statusPoison || 0) + 2;
@@ -6840,6 +6876,8 @@ function endTurn() {
     if (b.turns <= 0) delete player.buffs[stat];
   }
   processEntityStatus(player);
+  if (player.statusFear > 0) { player.statusFear--; if (player.statusFear === 0) log('Your courage returns.'); }
+  if (player.statusConfuse > 0) { player.statusConfuse--; if (player.statusConfuse === 0) log('Your head clears.'); }
   if (!player.alive || player.hp <= 0) { if (player.alive) gameOver(); return; }
   processTerrainEffects();
   if (!player.alive || player.hp <= 0) { if (player.alive) gameOver(); return; }
@@ -6955,6 +6993,14 @@ function grantMutation(mutationId) {
   updateSidebar();
 }
 
+// ---- cooking bonus effect (Banquet Hall talent): chance for a cooked dish to grant a bonus regen tick ----
+function maybeGrantCookingBonusEffect(it) {
+  if (it.foodFlavor && (player.cookingBonusEffectChance || 0) > 0 && Math.random() < player.cookingBonusEffectChance) {
+    applyBuff('regen', 2, 10);
+    log('The meal was extra hearty — you feel a bonus surge of regeneration!');
+  }
+}
+
 // ---- useItem v7: adds cyberware chips (learn cybernetic) and mutagen vials (grant mutation) ----
 function useItem(it) {
   if (it.type === 'chest') { openChest(it); return; }
@@ -7006,7 +7052,7 @@ function useItem(it) {
     case 'aoeconfuse': { const radius = (it.radius||3) + (player.throwRadiusBonus||0); const hit = hostilesWithinRadius(player.x, player.y, radius); hit.forEach(t => { t.statusConfuse = (t.statusConfuse||0) + (it.power||3); log(`${t.name} is disoriented by the flash!`); }); break; }
     case 'cureposion': { player.statusPoison = 0; log('The poison is cleansed from your body.'); break; }
     case 'poison': { player.statusPoison = (player.statusPoison||0) + it.power; log('That was a terrible idea.'); break; }
-    case 'food': { const amt = Math.round((it.power || 2) * (1 + (player.cookingHealBonus || 0))); player.hp = Math.min(player.maxHp, player.hp + amt); log(`You eat ${it.name} and recover ${amt} HP.`); break; }
+    case 'food': { const amt = Math.round((it.power || 2) * (1 + (player.cookingHealBonus || 0))); player.hp = Math.min(player.maxHp, player.hp + amt); log(`You eat ${it.name} and recover ${amt} HP.`); maybeGrantCookingBonusEffect(it); break; }
     case 'identify': { log('You feel more knowledgeable, though nothing seems to change.'); break; }
     case 'teleport': { blinkPlayer(30); break; }
     case 'escape': { blinkPlayer(6); applyBuff('invis', 1, 8); log('You vanish in a puff of smoke!'); break; }
@@ -7032,6 +7078,7 @@ function useItem(it) {
       player.hp = Math.min(player.maxHp, player.hp + (it.power || 5));
       applyBuff(it.statBuff, it.buffAmt, it.dur || 25);
       log(`${it.name} nourishes you and steels your ${it.statBuff.toUpperCase()}.`);
+      maybeGrantCookingBonusEffect(it);
       break;
     }
     case 'foodspell': {
@@ -7979,6 +8026,35 @@ const GUIDE_SECTIONS = [
     Esc to cancel with no cost spent. They no longer just drop you somewhere random.</div>
     <div class="modal-opt">Click any visible enemy (or yourself) to inspect them — this now shows active status effects
     (poisoned, afraid, confused, slowed, berserk, burrowed, and any buffs) alongside HP and description.</div>` },
+  { id:'statuseffects', label:'Status Effects', html: () => `
+    <div class="modal-opt">Every status effect below counts down by 1 each turn (yours or the monster's), including
+    while you're just standing still or resting — it isn't purely cosmetic, it changes what you and your target can
+    actually do that turn. Click any visible monster (or yourself) to see current status effects and how many turns
+    are left on each.</div>
+    <div class="modal-opt" style="margin-top:6px"><b>Poisoned</b> — <u>You:</u> lose up to 4 HP per turn (reduced by
+    Poison Resistance potions/gear, blocked entirely by poison immunity) until it wears off or you drink a Clarity/cure
+    item. <u>Monsters:</u> same — ticks HP down every turn regardless of what else they're doing.</div>
+    <div class="modal-opt"><b>Afraid</b> (inflicted by causesFear monsters, Fear-school spells) — <u>You:</u> cannot
+    initiate a melee or ranged weapon attack while afraid (you'll see "You're too terrified to fight!" and the attempt
+    still costs your turn) — you can still move, flee, cast spells, use items, or use techniques/cybernetics that
+    aren't weapon attacks. <u>Monsters:</u> flee directly away from you every turn instead of attacking.</div>
+    <div class="modal-opt"><b>Confused</b> (inflicted by causesConfuse monsters, Illusion-school spells/gas like
+    Hallucinogenic Mist, Flashbangs, EMP grenades) — <u>You:</u> each move has a 50% chance to send you stumbling in a
+    random direction instead of the one you pressed (which can accidentally trigger an attack on whatever's in that
+    random tile). <u>Monsters:</u> wander randomly instead of pursuing or attacking you.</div>
+    <div class="modal-opt"><b>Slowed</b> (Frost-touched attacks, Caltrops, Net Traps, some grenades) — <u>You:</u> a
+    50% chance each turn that trying to move fails outright ("You're too sluggish to move!") and burns the turn
+    anyway; this doesn't stop you from attacking an enemy that's already adjacent. <u>Monsters:</u> the same 50%
+    chance to fumble their turn, but only while more than 1 tile away from you — once adjacent they still attack
+    normally.</div>
+    <div class="modal-opt"><b>Berserk</b> — a one-time, permanent-for-the-fight boost some monsters trigger once
+    badly wounded (roughly +40% STR/attack, +15% DEX). No duration, no cure — it lasts until the monster dies.</div>
+    <div class="modal-opt"><b>Burrowed</b> — a monster ability where they go underground (untargetable and safe)
+    for a few turns, then resurface adjacent to you.</div>
+    <div class="modal-opt" style="margin-top:6px"><b>Curing status effects:</b> Tonic/Clarity Tonic (or the
+    'cureconfuse' effect) clears Confused; a fear-cure item clears Afraid; a general cure-all item or the Cure spell
+    school clears Poison, Afraid, and Confused together. Resistance potions (Fire/Frost/Poison) reduce or block their
+    matching damage type but don't cure a status already applied.</div>` },
   { id:'equipment', label:'Equipment', html: () => `
     <div class="modal-opt">Slots: Hand, Offhand, Body, Head, Feet, Ring, Amulet, Gloves, Cloak.</div>
     <div class="modal-opt">i — Inventory. Equipped items lettered A-I (select → Unequip). Backpack items lettered a-t per
