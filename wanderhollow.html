@@ -966,7 +966,7 @@ const MONSTER_BASES = {
 const SPELLS = [
   { id:'magicmissile', name:'Magic Missile', mp:3, type:'damage', power:[3,7], range:6, desc:'A bolt of arcane force that rarely misses.' },
   { id:'firebolt', name:'Firebolt', mp:5, type:'damage', power:[5,11], range:5, desc:'Hurls a searing bolt of flame.' },
-  { id:'frostbolt', name:'Frostbolt', mp:5, type:'damage', power:[4,9], range:5, desc:'A shard of ice that also chills the foe.' },
+  { id:'frostbolt', name:'Frostbolt', mp:5, type:'damage', power:[4,9], range:5, frost:true, desc:'A shard of ice that also chills the foe.' },
   { id:'lightning', name:'Lightning Bolt', mp:7, type:'damage', power:[7,15], range:7, desc:'A crackling bolt, strikes hard at range.' },
   { id:'heal', name:'Heal', mp:6, type:'heal', power:[12,22], range:0, desc:'Mends your wounds.' },
   { id:'regen', name:'Regeneration', mp:8, type:'buff', stat:'regen', power:3, dur:8, range:0, desc:'Steady healing over time.' },
@@ -1255,7 +1255,7 @@ const TALENTS_V2 = [
   { id:'vitality', name:'Vitality', desc:'HP/MP regeneration ticks twice as often', tier:1, requires:null, apply:()=>{ player.regenBonus=true; } },
   { id:'ironstomach', name:'Iron Stomach', desc:'+40 Max Stamina', tier:1, requires:null, apply:()=>{ player.maxStamina=(player.maxStamina||100)+40; player.stamina=(player.stamina||100)+40; } },
   // tier 2 — requires level 5
-  { id:'necrobond', name:"Necromancer's Bond", desc:'Summoned/raised/conjured allies gain +30% HP', tier:2, requires:{level:5}, apply:()=>{ player.allyHpBonus=0.3; } },
+  { id:'necrobond', name:"Necromancer's Bond", desc:'Summoned/raised/conjured allies gain +30% HP', tier:2, requires:{level:5}, apply:()=>{ player.allyHpBonus=(player.allyHpBonus||0)+0.3; } },
   { id:'battlehardened', name:'Battle-Hardened', desc:'+4 STR, +4 DEX', tier:2, requires:{level:5}, apply:()=>{ player.str+=4; player.dex+=4; } },
   { id:'manaflow', name:'Manaflow', desc:'+20% Max MP', tier:2, requires:{level:5}, apply:()=>{ const add=Math.round(player.maxMp*0.2); player.maxMp+=add; player.mp+=add; } },
   { id:'secondwind', name:'Second Wind', desc:'Once per rest, surviving a killing blow at 1 HP instead of dying', tier:2, requires:{level:5}, apply:()=>{ player.secondWindMax=(player.secondWindMax||0)+1; player.secondWindCharges=player.secondWindMax; } },
@@ -1474,7 +1474,7 @@ TECHNIQUES.push(
   { id:'bloodfrenzy', name:'Blood Frenzy', resource:'stamina', mp:20, type:'bloodbuff', stat:'str', power:8, dur:14, selfCostPct:0.1, range:0, school:'Berserker Arts', tier:2, desc:'The more you bleed, the harder you hit.' },
   { id:'skullcrusher', name:'Skullcrusher', resource:'stamina', mp:26, type:'damage', power:[22,36], range:1, school:'Berserker Arts', tier:3, desc:'A devastating overhead blow with your whole body behind it.' },
   { id:'undyingrage', name:'Undying Rage', resource:'stamina', mp:32, type:'bloodbuff', stat:'str', power:12, dur:16, selfCostPct:0.15, range:0, school:'Berserker Arts', tier:4, desc:'Pain no longer registers — only the fight remains.' },
-  { id:'cataclysmicslam', name:'Cataclysmic Slam', resource:'stamina', mp:40, type:'damage', power:[34,54], range:1, aoe:true, aoeRadius:2, school:'Berserker Arts', tier:4, desc:'You slam the ground with enough force to stagger everything nearby.' },
+  { id:'cataclysmicslam', name:'Cataclysmic Slam', resource:'stamina', mp:40, type:'damage', power:[34,54], range:1, aoe:true, aoeRadius:2, stagger:true, groundShake:true, school:'Berserker Arts', tier:4, desc:'You slam the ground with enough force to stagger everything nearby.' },
   { id:'worldender', name:"World-Ender's Fury", resource:'stamina', mp:55, type:'bloodbuff', stat:'str', power:20, dur:20, selfCostPct:0.2, range:0, school:'Berserker Arts', tier:5, desc:'A legendary battle-fury that turns you into a force of nature.' },
   // ---- Monastic Arts (ki/stamina, techniques + self-buffs) ----
   { id:'meditativestrike', name:'Meditative Strike', resource:'stamina', mp:9, type:'damage', power:[8,15], range:1, school:'Monastic Arts', tier:1, desc:'A single strike delivered with perfect clarity of mind.' },
@@ -1521,11 +1521,11 @@ TECHNIQUES.push(
   { id:'lungingstrike', name:'Lunging Strike', resource:'stamina', mp:13, type:'damage', power:[12,20], range:3, school:'Spearplay', tier:2, desc:'You close distance and strike in one fluid motion.' },
   { id:'trackingshot', name:'Tracking Shot', resource:'stamina', mp:12, type:'damage', power:[11,19], range:8, school:'Archery', tier:2, desc:'A shot that seems to curve toward its mark.' },
   { id:'ironbodytechnique', name:'Iron Body Technique', resource:'stamina', mp:18, type:'buff', stat:'armor', power:11, dur:12, range:0, school:'Brawling', tier:3, desc:'Your body hardens like tempered steel for a time.' },
-  { id:'shieldbash', name:'Shield Bash', resource:'stamina', mp:11, type:'damage', power:[9,16], range:1, school:'Defense', tier:1, desc:'A brutal bash that staggers your opponent.' },
+  { id:'shieldbash', name:'Shield Bash', resource:'stamina', mp:11, type:'damage', power:[9,16], range:1, stagger:true, school:'Defense', tier:1, desc:'A brutal bash that staggers your opponent.' },
   { id:'venomedge', name:'Venom Edge', resource:'stamina', mp:15, type:'damage', power:[11,18], range:1, poison:2, school:'Daggers', tier:2, desc:'A quick cut coated in a fast-acting toxin.' },
   { id:'dualstormfinisher', name:'Dual Storm Finisher', resource:'stamina', mp:38, type:'damage', power:[32,50], range:1, school:'Dual Wielding', tier:4, desc:'A finishing combination meant to end a fight outright.' },
   { id:'painisweakness', name:'Pain Is Weakness', resource:'stamina', mp:24, type:'bloodbuff', stat:'str', power:9, dur:14, selfCostPct:0.12, range:0, school:'Berserker Arts', tier:3, desc:'You embrace the pain and let it fuel you further.' },
-  { id:'ki_burst', name:'Ki Burst', resource:'stamina', mp:16, type:'damage', power:[13,22], range:1, aoe:true, aoeRadius:1, school:'Monastic Arts', tier:2, desc:'A sudden release of inner energy that staggers everything nearby.' },
+  { id:'ki_burst', name:'Ki Burst', resource:'stamina', mp:16, type:'damage', power:[13,22], range:1, aoe:true, aoeRadius:1, stagger:true, school:'Monastic Arts', tier:2, desc:'A sudden release of inner energy that staggers everything nearby.' },
   { id:'divideandconquer', name:'Divide and Conquer', resource:'stamina', mp:26, type:'debuff', stat:'str', power:-8, dur:10, range:5, school:'Tactics', tier:3, desc:'Isolating a single foe from the rest makes them far easier to bring down.' },
 );
 
@@ -1561,8 +1561,8 @@ const CYBERNETICS = [
   { id:'chronoscanner', name:'Chronoscanner Overclock', category:'Exotic', activation:'active', resource:'charge', mp:20, type:'debuff', stat:'dex', power:-8, dur:10, range:5, aoe:true, aoeRadius:2, desc:'Overclocks your perception, making enemies seem to crawl.' },
   { id:'blinkdrive', name:'Blink Drive Implant', category:'Exotic', activation:'active', resource:'charge', mp:24, type:'blinklike', power:30, range:0, desc:'A prototype short-range teleportation implant.' },
   { id:'warprelay', name:'Warp Relay Implant', category:'Exotic', activation:'active', resource:'charge', mp:20, type:'travelbypass', power:0, range:0, desc:'Pings the waystone network and lets you jump to any known site from anywhere.' },
-  { id:'railgunarm', name:'Railgun Arm', category:'Exotic', activation:'active', resource:'charge', mp:26, type:'damage', power:[20,32], range:8, desc:'Replaces your forearm with a rail-accelerated slug thrower.' },
-  { id:'overloaddischarge', name:'Neural Overload Discharge', category:'Exotic', activation:'active', resource:'charge', mp:24, type:'damage', power:[10,18], range:5, aoe:true, aoeRadius:2, desc:'Discharges raw current through anything nearby.' },
+  { id:'railgunarm', name:'Railgun Arm', category:'Exotic', activation:'active', resource:'charge', mp:26, type:'damage', power:[20,32], range:8, pierceLine:true, desc:'Replaces your forearm with a rail-accelerated slug thrower.' },
+  { id:'overloaddischarge', name:'Neural Overload Discharge', category:'Exotic', activation:'active', resource:'charge', mp:24, type:'damage', power:[10,18], range:5, aoe:true, aoeRadius:2, chainLightning:true, desc:'Discharges raw current through anything nearby.' },
 ];
 
 // ===================== CYBERNETICS EXPANSION: fill existing categories + 4 new ones, full tier progression =====================
@@ -1592,8 +1592,8 @@ CYBERNETICS.push(
   { id:'lastditchprotocol', name:'Last-Ditch Protocol', category:'Defense', activation:'active', resource:'charge', mp:40, type:'heal', power:[40,60], range:0, tier:5, desc:'An emergency full-system medical override, saved for when everything else fails.' },
   // ---- Exotic: tier 2-5 ----
   { id:'plasmalance', name:'Plasma Lance', category:'Exotic', activation:'active', resource:'charge', mp:32, type:'damage', power:[24,38], range:6, destructive:true, igniteGround:true, tier:3, desc:'A superheated plasma bolt that ignites whatever it touches.' },
-  { id:'singularitygrenade', name:'Singularity Grenade Launcher', category:'Exotic', activation:'active', resource:'charge', mp:38, type:'damage', power:[20,32], range:6, aoe:true, aoeRadius:3, tier:4, desc:'Fires a grenade that briefly folds space around its target.' },
-  { id:'orbitalstrikebeacon', name:'Orbital Strike Beacon', category:'Exotic', activation:'active', resource:'charge', mp:55, type:'damage', power:[45,70], range:8, aoe:true, aoeRadius:3, destructive:true, tier:5, desc:'A one-use-per-recharge marker that calls down fire from something far above.' },
+  { id:'singularitygrenade', name:'Singularity Grenade Launcher', category:'Exotic', activation:'active', resource:'charge', mp:38, type:'damage', power:[20,32], range:6, aoe:true, aoeRadius:3, gravityPull:2, tier:4, desc:'Fires a grenade that briefly folds space around its target, dragging everything nearby inward.' },
+  { id:'orbitalstrikebeacon', name:'Orbital Strike Beacon', category:'Exotic', activation:'active', resource:'charge', mp:55, type:'damage', power:[45,70], range:8, aoe:true, aoeRadius:3, destructive:true, igniteGround:true, tier:5, desc:'A one-use-per-recharge marker that calls down fire from something far above.' },
   { id:'antimattercore', name:'Antimatter Core Implant', category:'Exotic', activation:'active', resource:'charge', mp:60, type:'damage', power:[55,85], range:5, aoe:true, aoeRadius:3, destructive:true, tier:5, desc:'A barely-stable prototype power core repurposed as a weapon of last resort.' },
   // ---- Neural (new category: hacking, debuffs, control) ----
   { id:'glitchpulse', name:'Glitch Pulse', category:'Neural', activation:'active', resource:'charge', mp:14, type:'debuff', stat:'dex', power:-6, dur:8, range:5, tier:1, desc:'A disorienting pulse that scrambles a target\'s motor signals.' },
@@ -1633,10 +1633,10 @@ CYBERNETICS.push(
   { id:'motiontracker', name:'Motion Tracker', category:'Sensory', activation:'active', resource:'charge', mp:8, type:'utility', range:0, tier:1, desc:'A basic sonar ping of the immediate area.' },
   { id:'basicweave', name:'Basic Nanoweave', category:'Defense', activation:'passive', tier:1, desc:'A thin layer of protective fiber.', apply:()=>{ player.cyberArmor=(player.cyberArmor||0)+2; }, remove:()=>{ player.cyberArmor=(player.cyberArmor||0)-2; } },
   { id:'shockabsorbers', name:'Shock Absorber Joints', category:'Defense', activation:'passive', tier:1, desc:'Basic joint dampening.', apply:()=>{ player.con+=1; }, remove:()=>{ player.con-=1; } },
-  { id:'sparkgun', name:'Spark Gun', category:'Exotic', activation:'active', resource:'charge', mp:16, type:'damage', power:[10,18], range:5, tier:1, desc:'An entry-level arc weapon, crude but functional.' },
+  { id:'sparkgun', name:'Spark Gun', category:'Exotic', activation:'active', resource:'charge', mp:16, type:'damage', power:[10,18], range:5, chainLightning:true, tier:1, desc:'An entry-level arc weapon, crude but functional.' },
   { id:'staticfield', name:'Static Field Emitter', category:'Exotic', activation:'passive', tier:1, desc:'A faint personal static field.', apply:()=>{ player.cyberArmor=(player.cyberArmor||0)+1; player.dex+=1; }, remove:()=>{ player.cyberArmor=(player.cyberArmor||0)-1; player.dex-=1; } },
   { id:'basicfirewall', name:'Basic Firewall', category:'Neural', activation:'passive', tier:1, desc:'Minimal intrusion protection.', apply:()=>{ player.int+=1; }, remove:()=>{ player.int-=1; } },
-  { id:'staticknife', name:'Static Blade', category:'Weapons Systems', activation:'active', resource:'charge', mp:10, type:'damage', power:[8,14], range:1, tier:1, desc:'A crude but serviceable retractable knife.' },
+  { id:'staticknife', name:'Static Blade', category:'Weapons Systems', activation:'active', resource:'charge', mp:10, type:'damage', power:[8,14], range:1, chainLightning:true, tier:1, desc:'A crude but serviceable retractable knife, its edge crackling with residual charge.' },
   { id:'ironlung', name:'Iron Lung Filter', category:'Bio-Augment', activation:'passive', tier:1, desc:'Filters airborne toxins.', apply:()=>{ player.poisonDmgReduction=(player.poisonDmgReduction||0)+0.1; }, remove:()=>{ player.poisonDmgReduction-=0.1; } },
   { id:'quietstep', name:'Quiet Step Padding', category:'Stealth', activation:'passive', tier:1, desc:'Sound-dampened footwear integration.', apply:()=>{ player.dex+=1; }, remove:()=>{ player.dex-=1; } },
   { id:'basiccloak', name:'Basic Cloak Field', category:'Stealth', activation:'active', resource:'charge', mp:14, type:'buff', stat:'invis', power:1, dur:10, range:0, tier:1, desc:'A rudimentary short-lived stealth field.' },
@@ -1668,7 +1668,7 @@ const MUTATIONS = [
   { id:'mindspike', name:'Mind Spike', category:'Psychic', activation:'active', corruptionReq:10, resource:'hp', selfCost:6, type:'damage', power:[7,14], range:5, desc:'A lance of pure psychic force.' },
   { id:'fearaura', name:'Fear Aura', category:'Psychic', activation:'active', corruptionReq:15, resource:'hp', selfCost:8, type:'debuff', stat:'fear', power:1, dur:8, range:5, aoe:true, aoeRadius:2, desc:'Your presence alone unravels the minds of nearby foes.' },
   { id:'precognition', name:'Precognition', category:'Psychic', activation:'passive', corruptionReq:10, desc:'Flashes of the immediate future flicker behind your eyes.', apply:()=>{ player.critBonus=(player.critBonus||0)+0.05; } },
-  { id:'telekineticshove', name:'Telekinetic Shove', category:'Psychic', activation:'active', corruptionReq:15, resource:'hp', selfCost:7, type:'debuff', stat:'dex', power:-8, dur:10, range:5, desc:'An unseen force batters a foe off balance.' },
+  { id:'telekineticshove', name:'Telekinetic Shove', category:'Psychic', activation:'active', corruptionReq:15, resource:'hp', selfCost:7, type:'debuff', stat:'dex', power:-8, dur:10, range:5, knockback:3, desc:'An unseen force batters a foe off balance.' },
   { id:'mentalfortitude', name:'Mental Fortitude', category:'Psychic', activation:'passive', corruptionReq:0, desc:'Your mind has hardened against the whispers you now hear.', apply:()=>{ player.int+=2; player.wis+=2; } },
   { id:'psychicscream', name:'Psychic Scream', category:'Psychic', activation:'active', corruptionReq:35, resource:'hp', selfCost:14, type:'damage', power:[12,20], range:5, aoe:true, aoeRadius:2, desc:'A soundless shriek that tears at the minds of all nearby.' },
 
@@ -1702,7 +1702,7 @@ MUTATIONS.push(
   { id:'psychicdominion', name:'Psychic Dominion', category:'Psychic', activation:'active', corruptionReq:60, resource:'hp', selfCost:22, type:'damage', power:[35,54], range:6, aoe:true, aoeRadius:3, desc:'A wave of pure mental force that shatters the minds of everything nearby.' },
   // ---- Elemental: tier 3-5 ----
   { id:'infernoglands', name:'Inferno Glands', category:'Elemental', activation:'active', corruptionReq:30, resource:'hp', selfCost:13, type:'damage', power:[20,32], range:5, destructive:true, igniteGround:true, desc:'Glands that secrete a substance which ignites on contact with air.' },
-  { id:'glacialform', name:'Glacial Form', category:'Elemental', activation:'active', corruptionReq:35, resource:'hp', selfCost:14, type:'damage', power:[18,29], range:5, desc:'Your arm briefly crystallizes into living ice, shattering on impact.' },
+  { id:'glacialform', name:'Glacial Form', category:'Elemental', activation:'active', corruptionReq:35, resource:'hp', selfCost:14, type:'damage', power:[18,29], range:5, frost:true, desc:'Your arm briefly crystallizes into living ice, shattering on impact.' },
   { id:'stormheart', name:'Storm Heart', category:'Elemental', activation:'passive', corruptionReq:40, desc:'Lightning now visibly arcs beneath your skin.', apply:()=>{ player.mutationDmgBonus=(player.mutationDmgBonus||0)+5; } },
   { id:'magmablood', name:'Magma Blood', category:'Elemental', activation:'active', corruptionReq:55, resource:'hp', selfCost:20, type:'damage', power:[34,52], range:5, aoe:true, aoeRadius:2, destructive:true, igniteGround:true, desc:'You open a vein and molten blood erupts outward.' },
   // ---- Aberrant: tier 3-5 (beyond capstone) ----
@@ -1711,11 +1711,11 @@ MUTATIONS.push(
   { id:'writhingform', name:'Writhing Form', category:'Aberrant', activation:'active', corruptionReq:45, resource:'hp', selfCost:16, type:'damage', power:[26,40], range:1, aoe:true, aoeRadius:2, desc:'Your body briefly loses its human shape entirely.' },
   // ---- Void/Cosmic (new category) ----
   { id:'starlitveins', name:'Starlit Veins', category:'Void/Cosmic', activation:'passive', corruptionReq:15, desc:'Faint points of light move beneath your skin like a captured night sky.', apply:()=>{ player.int+=2; } },
-  { id:'gravitywell', name:'Gravity Well', category:'Void/Cosmic', activation:'active', corruptionReq:25, resource:'hp', selfCost:10, type:'debuff', stat:'dex', power:-9, dur:10, range:5, desc:'A pocket of distorted gravity briefly forms around your target.' },
+  { id:'gravitywell', name:'Gravity Well', category:'Void/Cosmic', activation:'active', corruptionReq:25, resource:'hp', selfCost:10, type:'debuff', stat:'dex', power:-9, dur:10, range:5, aoe:true, aoeRadius:2, gravityPull:2, desc:'A pocket of distorted gravity briefly forms around your target, dragging nearby foes toward its center.' },
   { id:'entropytouch', name:'Entropy Touch', category:'Void/Cosmic', activation:'active', corruptionReq:35, resource:'hp', selfCost:13, type:'execute', power:[20,32], range:1, desc:'Your touch accelerates decay by several thousand years in an instant.' },
   { id:'cosmicinsight', name:'Cosmic Insight', category:'Void/Cosmic', activation:'passive', corruptionReq:30, desc:'You perceive threads of causality other minds cannot.', apply:()=>{ player.critBonus=(player.critBonus||0)+0.08; player.int+=2; } },
-  { id:'blackholesingularity', name:'Black Hole Singularity', category:'Void/Cosmic', activation:'active', corruptionReq:65, resource:'hp', selfCost:24, type:'damage', power:[40,62], range:5, aoe:true, aoeRadius:3, desc:'A pinprick singularity you tear open and immediately close.' },
-  { id:'starcollapse', name:'Star Collapse', category:'Void/Cosmic', activation:'active', corruptionReq:75, resource:'hp', selfCost:30, type:'damage', power:[60,90], range:6, aoe:true, aoeRadius:3, destructive:true, desc:'For one impossible instant, you channel the death throes of a dying star.' },
+  { id:'blackholesingularity', name:'Black Hole Singularity', category:'Void/Cosmic', activation:'active', corruptionReq:65, resource:'hp', selfCost:24, type:'damage', power:[40,62], range:5, aoe:true, aoeRadius:3, gravityPull:3, desc:'A pinprick singularity you tear open and immediately close, dragging everything nearby toward it first.' },
+  { id:'starcollapse', name:'Star Collapse', category:'Void/Cosmic', activation:'active', corruptionReq:75, resource:'hp', selfCost:30, type:'damage', power:[60,90], range:6, aoe:true, aoeRadius:3, destructive:true, igniteGround:true, gravityPull:2, desc:'For one impossible instant, you channel the death throes of a dying star.' },
   // ---- Predatory (new category: beast-like traits) ----
   { id:'sharpenedsenses', name:'Sharpened Senses', category:'Predatory', activation:'passive', corruptionReq:5, desc:'Your senses have sharpened well past human norms.', apply:()=>{ player.dex+=2; } },
   { id:'pouncingstrike', name:'Pouncing Strike', category:'Predatory', activation:'active', corruptionReq:15, resource:'hp', selfCost:7, type:'damage', power:[12,20], range:2, desc:'You close distance in a single predatory lunge.' },
@@ -1725,9 +1725,9 @@ MUTATIONS.push(
   { id:'savagemauling', name:'Savage Mauling', category:'Predatory', activation:'active', corruptionReq:50, resource:'hp', selfCost:17, type:'damage', power:[30,46], range:1, desc:'A frenzied mauling attack that leaves nothing clean about the wound.' },
   // ---- Plague (new category: poison/disease themed) ----
   { id:'toxicsweat', name:'Toxic Sweat', category:'Plague', activation:'passive', corruptionReq:10, desc:'Your very sweat has become mildly caustic.', apply:()=>{ player.poisonDmgReduction=(player.poisonDmgReduction||0)+0.15; } },
-  { id:'plaguebreath', name:'Plague Breath', category:'Plague', activation:'active', corruptionReq:25, resource:'hp', selfCost:11, type:'debuff', stat:'poison', power:5, dur:8, range:4, aoe:true, aoeRadius:2, desc:'A single exhaled breath of pure contagion.' },
+  { id:'plaguebreath', name:'Plague Breath', category:'Plague', activation:'active', corruptionReq:25, resource:'hp', selfCost:11, type:'debuff', stat:'poison', power:5, dur:8, range:4, aoe:true, aoeRadius:2, gasCloud:true, gasKind:'poison', desc:'A single exhaled breath of pure contagion that lingers and spreads.' },
   { id:'rottingaura', name:'Rotting Aura', category:'Plague', activation:'passive', corruptionReq:30, desc:'Plants wilt and food spoils faster near you — and so do your enemies.', apply:()=>{ player.eldritchDmgBonus=(player.eldritchDmgBonus||0)+0.1; } },
-  { id:'contagionburst', name:'Contagion Burst', category:'Plague', activation:'active', corruptionReq:40, resource:'hp', selfCost:15, type:'debuff', stat:'poison', power:8, dur:10, range:5, aoe:true, aoeRadius:3, desc:'A rupturing pustule releases a cloud of virulent disease.' },
+  { id:'contagionburst', name:'Contagion Burst', category:'Plague', activation:'active', corruptionReq:40, resource:'hp', selfCost:15, type:'debuff', stat:'poison', power:8, dur:10, range:5, aoe:true, aoeRadius:3, gasCloud:true, gasKind:'poison', desc:'A rupturing pustule releases a spreading cloud of virulent disease.' },
   { id:'plaguelord', name:'Plague Lord', category:'Plague', activation:'passive', corruptionReq:55, desc:'You have become a walking epidemic given human shape.', apply:()=>{ player.eldritchDmgBonus=(player.eldritchDmgBonus||0)+0.2; player.maxHp+=20; player.hp+=20; } },
   // ---- Symbiotic (new category: parasite/hivemind themed) ----
   { id:'symbioticlatch', name:'Symbiotic Latch', category:'Symbiotic', activation:'passive', corruptionReq:15, desc:'Something has attached itself just beneath your shoulder blade — and it helps.', apply:()=>{ player.mutationRegen=(player.mutationRegen||0)+1; } },
@@ -1746,7 +1746,7 @@ MUTATIONS.push(
   { id:'psychicwhisper', name:'Psychic Whisper', category:'Psychic', activation:'active', corruptionReq:5, resource:'hp', selfCost:4, type:'debuff', stat:'dex', power:-4, dur:6, range:4, desc:'A faint, unsettling whisper only your target can hear.' },
   { id:'wakingdreams', name:'Waking Dreams', category:'Psychic', activation:'passive', corruptionReq:20, desc:'The boundary between waking and dreaming has thinned.', apply:()=>{ player.wis+=2; } },
   { id:'warmblood', name:'Warm Blood', category:'Elemental', activation:'passive', corruptionReq:5, desc:'Your blood runs slightly warmer than it should.', apply:()=>{ player.mutationFrost=(player.mutationFrost||0)+1; } },
-  { id:'sparkfingers', name:'Spark Fingers', category:'Elemental', activation:'active', corruptionReq:10, resource:'hp', selfCost:5, type:'damage', power:[7,13], range:3, desc:'A small crackle of static discharge from your fingertips.' },
+  { id:'sparkfingers', name:'Spark Fingers', category:'Elemental', activation:'active', corruptionReq:10, resource:'hp', selfCost:5, type:'damage', power:[7,13], range:3, chainLightning:true, desc:'A small crackle of static discharge from your fingertips.' },
   { id:'emberskin', name:'Ember Skin', category:'Elemental', activation:'passive', corruptionReq:15, desc:'Faint warmth radiates from your skin.', apply:()=>{ player.mutationDmgBonus=(player.mutationDmgBonus||0)+2; } },
   { id:'unsettlingpresence', name:'Unsettling Presence', category:'Aberrant', activation:'passive', corruptionReq:5, desc:'People find it hard to place what\'s wrong about you.', apply:()=>{ player.eldritchDmgBonus=(player.eldritchDmgBonus||0)+0.05; } },
   { id:'flickeringform', name:'Flickering Form', category:'Aberrant', activation:'active', corruptionReq:15, resource:'hp', selfCost:6, type:'blinklike', power:3, range:0, desc:'You briefly lose cohesion and reappear nearby.' },
@@ -1762,10 +1762,10 @@ MUTATIONS.push(
   { id:'granitehide', name:'Granite Hide', category:'Physical', activation:'passive', corruptionReq:20, desc:'Patches of stone-like hardness across your forearms.', apply:()=>{ player.mutationArmor=(player.mutationArmor||0)+4; } },
   { id:'seconstomach', name:'Second Stomach', category:'Physical', activation:'passive', corruptionReq:10, desc:'An extra digestive organ that makes food go further.', apply:()=>{ player.cookingHealBonus=(player.cookingHealBonus||0)+0.15; } },
   { id:'empathicbond', name:'Empathic Bond', category:'Psychic', activation:'passive', corruptionReq:15, desc:'You feel the pain of those around you — and share your strength with them too.', apply:()=>{ player.allyHpBonus=(player.allyHpBonus||0)+0.1; } },
-  { id:'frostbite_mut', name:'Frostbite Touch', category:'Elemental', activation:'active', corruptionReq:20, resource:'hp', selfCost:9, type:'damage', power:[13,21], range:1, desc:'Your touch leaves flesh blackened with frost.' },
+  { id:'frostbite_mut', name:'Frostbite Touch', category:'Elemental', activation:'active', corruptionReq:20, resource:'hp', selfCost:9, type:'damage', power:[13,21], range:1, frost:true, desc:'Your touch leaves flesh blackened with frost.' },
   { id:'echoingvoid', name:'Echoing Void', category:'Void/Cosmic', activation:'passive', corruptionReq:20, desc:'A faint echo of somewhere else lingers around you.', apply:()=>{ player.eldritchDmgBonus=(player.eldritchDmgBonus||0)+0.08; } },
   { id:'ambushinstinct', name:'Ambush Instinct', category:'Predatory', activation:'passive', corruptionReq:15, desc:'You have a predator\'s patience for the perfect moment.', apply:()=>{ player.critBonus=(player.critBonus||0)+0.05; } },
-  { id:'sporecloud', name:'Spore Cloud', category:'Plague', activation:'active', corruptionReq:15, resource:'hp', selfCost:8, type:'debuff', stat:'poison', power:3, dur:6, range:3, aoe:true, aoeRadius:1, desc:'A small burst of infectious spores.' },
+  { id:'sporecloud', name:'Spore Cloud', category:'Plague', activation:'active', corruptionReq:15, resource:'hp', selfCost:8, type:'debuff', stat:'poison', power:3, dur:6, range:3, aoe:true, aoeRadius:1, gasCloud:true, gasKind:'poison', desc:'A small burst of infectious spores that lingers in the air.' },
   { id:'sharedstrength', name:'Shared Strength', category:'Symbiotic', activation:'passive', corruptionReq:20, desc:'Your passenger lends you a fraction of its own vigor.', apply:()=>{ player.str+=2; player.con+=1; } },
   { id:'ossifiedjoints', name:'Ossified Joints', category:'Physical', activation:'passive', corruptionReq:25, desc:'Your joints have hardened into something closer to stone than bone.', apply:()=>{ player.maxHp+=12; } },
   { id:'farsight', name:'Farsight', category:'Psychic', activation:'passive', corruptionReq:25, desc:'You occasionally glimpse events before they happen.', apply:()=>{ player.dodgeChance=(player.dodgeChance||0)+0.04; } },
@@ -2468,20 +2468,20 @@ SPELLS.push(
   { id:'greaterfireball', name:'Greater Fireball', mp:24, type:'damage', power:[22,36], range:6, aoe:true, aoeRadius:2, destructive:true, igniteGround:true, school:'Elemental Mastery', tier:3, desc:'A larger, hungrier fireball that leaves a lasting inferno behind.' },
   { id:'meteorswarm', name:'Meteor Swarm', mp:40, type:'damage', power:[34,54], range:7, aoe:true, aoeRadius:3, destructive:true, igniteGround:true, school:'Elemental Mastery', tier:4, desc:'You call down a cluster of blazing meteors.' },
   { id:'sunfirecataclysm', name:'Sunfire Cataclysm', mp:70, type:'damage', power:[60,95], range:8, aoe:true, aoeRadius:4, destructive:true, igniteGround:true, school:'Elemental Mastery', tier:5, desc:'A fragment of the sun itself, called down and unleashed. Nothing about this is subtle.' },
-  { id:'icespear', name:'Ice Spear', mp:12, type:'damage', power:[10,18], range:6, school:'Elemental Mastery', tier:2, desc:'A javelin of solid ice hurled with bone-breaking force.' },
-  { id:'glacialburst', name:'Glacial Burst', mp:22, type:'damage', power:[18,30], range:5, aoe:true, aoeRadius:2, school:'Elemental Mastery', tier:3, desc:'A sudden eruption of ice and freezing wind.' },
-  { id:'absolutezero', name:'Absolute Zero', mp:38, type:'damage', power:[30,48], range:6, aoe:true, aoeRadius:3, school:'Elemental Mastery', tier:4, desc:'You draw all warmth from the air itself.' },
-  { id:'thelongwinter', name:'The Long Winter', mp:65, type:'damage', power:[52,80], range:7, aoe:true, aoeRadius:4, school:'Elemental Mastery', tier:5, desc:'A localized, brief ice age, over almost as soon as it began.' },
-  { id:'chainlightning', name:'Chain Lightning', mp:16, type:'damage', power:[14,24], range:6, aoe:true, aoeRadius:2, school:'Elemental Mastery', tier:2, desc:'Lightning that arcs from foe to foe.' },
-  { id:'thunderstrike', name:'Thunderstrike', mp:26, type:'damage', power:[22,36], range:6, school:'Elemental Mastery', tier:3, desc:'A single, devastating bolt from a clear sky.' },
+  { id:'icespear', name:'Ice Spear', mp:12, type:'damage', power:[10,18], range:6, frost:true, school:'Elemental Mastery', tier:2, desc:'A javelin of solid ice hurled with bone-breaking force.' },
+  { id:'glacialburst', name:'Glacial Burst', mp:22, type:'damage', power:[18,30], range:5, aoe:true, aoeRadius:2, frost:true, school:'Elemental Mastery', tier:3, desc:'A sudden eruption of ice and freezing wind.' },
+  { id:'absolutezero', name:'Absolute Zero', mp:38, type:'damage', power:[30,48], range:6, aoe:true, aoeRadius:3, frost:true, school:'Elemental Mastery', tier:4, desc:'You draw all warmth from the air itself.' },
+  { id:'thelongwinter', name:'The Long Winter', mp:65, type:'damage', power:[52,80], range:7, aoe:true, aoeRadius:4, frost:true, school:'Elemental Mastery', tier:5, desc:'A localized, brief ice age, over almost as soon as it began.' },
+  { id:'chainlightning', name:'Chain Lightning', mp:16, type:'damage', power:[14,24], range:6, aoe:true, aoeRadius:2, chainLightning:true, school:'Elemental Mastery', tier:2, desc:'Lightning that arcs from foe to foe.' },
+  { id:'thunderstrike', name:'Thunderstrike', mp:26, type:'damage', power:[22,36], range:6, chainLightning:true, school:'Elemental Mastery', tier:3, desc:'A single, devastating bolt from a clear sky.' },
   // ---- Storm Magic (NEW school) ----
-  { id:'galewind', name:'Gale Wind', mp:10, type:'debuff', stat:'dex', power:-6, dur:8, range:5, school:'Storm Magic', tier:1, desc:'A gust strong enough to throw off any foe\'s footing.' },
-  { id:'lightningjavelin', name:'Lightning Javelin', mp:14, type:'damage', power:[12,20], range:7, school:'Storm Magic', tier:1, desc:'A spear of crackling electricity.' },
-  { id:'thunderclap', name:'Thunderclap', mp:18, type:'debuff', stat:'fear', power:1, dur:6, range:4, aoe:true, aoeRadius:2, school:'Storm Magic', tier:2, desc:'A deafening clap that rattles nerves as much as eardrums.' },
+  { id:'galewind', name:'Gale Wind', mp:10, type:'debuff', stat:'dex', power:-6, dur:8, range:5, knockback:1, school:'Storm Magic', tier:1, desc:'A gust strong enough to throw off any foe\'s footing.' },
+  { id:'lightningjavelin', name:'Lightning Javelin', mp:14, type:'damage', power:[12,20], range:7, chainLightning:true, school:'Storm Magic', tier:1, desc:'A spear of crackling electricity.' },
+  { id:'thunderclap', name:'Thunderclap', mp:18, type:'debuff', stat:'fear', power:1, dur:6, range:4, aoe:true, aoeRadius:2, knockback:1, school:'Storm Magic', tier:2, desc:'A deafening clap that rattles nerves as much as eardrums.' },
   { id:'ridethelightning', name:'Ride the Lightning', mp:20, type:'blinklike', power:8, range:0, school:'Storm Magic', tier:2, desc:'You become lightning, briefly, and strike somewhere new.' },
-  { id:'tornado', name:'Tornado', mp:32, type:'damage', power:[22,36], range:6, aoe:true, aoeRadius:3, school:'Storm Magic', tier:3, desc:'A localized funnel of destructive wind.' },
-  { id:'hurricaneforce', name:'Hurricane Force', mp:44, type:'damage', power:[32,50], range:6, aoe:true, aoeRadius:3, school:'Storm Magic', tier:4, desc:'A miniature hurricane, called and released in a single moment.' },
-  { id:'eyeofthestorm', name:'Eye of the Storm', mp:68, type:'damage', power:[54,82], range:7, aoe:true, aoeRadius:4, school:'Storm Magic', tier:5, desc:'You become the calm center of a storm that annihilates everything around it.' },
+  { id:'tornado', name:'Tornado', mp:32, type:'damage', power:[22,36], range:6, aoe:true, aoeRadius:3, knockback:2, school:'Storm Magic', tier:3, desc:'A localized funnel of destructive wind.' },
+  { id:'hurricaneforce', name:'Hurricane Force', mp:44, type:'damage', power:[32,50], range:6, aoe:true, aoeRadius:3, knockback:3, school:'Storm Magic', tier:4, desc:'A miniature hurricane, called and released in a single moment.' },
+  { id:'eyeofthestorm', name:'Eye of the Storm', mp:68, type:'damage', power:[54,82], range:7, aoe:true, aoeRadius:4, knockback:3, chainLightning:true, school:'Storm Magic', tier:5, desc:'You become the calm center of a storm that annihilates everything around it.' },
   { id:'staticfield_spell', name:'Static Field', mp:16, type:'buff', stat:'armor', power:9, dur:12, range:0, school:'Storm Magic', tier:2, desc:'A crackling personal ward of contained electricity.' },
   // ---- Alchemy: real gas/poison tier progression (Caustic Gas already fixed to be a real cloud) ----
   { id:'toxicbloom', name:'Toxic Bloom', mp:16, type:'debuff', stat:'poison', power:6, dur:8, range:5, aoe:true, aoeRadius:2, gasCloud:true, gasKind:'poison', school:'Alchemy', tier:2, desc:'A billowing, larger cloud of concentrated toxin.' },
@@ -2505,7 +2505,7 @@ SPELLS.push(
   { id:'wrathofthefaithful', name:'Wrath of the Faithful', mp:48, type:'smite', power:[42,64], range:7, aoe:true, aoeRadius:3, school:'Holy', tier:4, desc:'The combined fury of every prayer ever answered, focused into one strike.' },
   // ---- Nature: more tiers ----
   { id:'naturesswrath', name:"Nature's Wrath", mp:20, type:'damage', power:[16,27], range:5, aoe:true, aoeRadius:2, school:'Nature', tier:3, desc:'The forest itself lashes out at your command.' },
-  { id:'earthquake', name:'Earthquake', mp:34, type:'damage', power:[26,40], range:6, aoe:true, aoeRadius:3, school:'Nature', tier:4, desc:'The ground itself buckles and heaves.' },
+  { id:'earthquake', name:'Earthquake', mp:34, type:'damage', power:[26,40], range:6, aoe:true, aoeRadius:3, groundShake:true, school:'Nature', tier:4, desc:'The ground itself buckles and heaves.' },
   { id:'worldtreeblessing', name:"World Tree's Blessing", mp:55, type:'heal', power:[45,68], range:0, school:'Nature', tier:5, desc:'A blessing drawn from the roots of the oldest tree in the world.' },
   { id:'summondrake', name:'Summon Drake', mp:38, type:'summon', summonId:'wyrmling', duration:70, range:0, school:'Nature', tier:4, desc:'A young dragon answers the call of the wild.' },
   // ---- Chronomancy: more tiers ----
@@ -2525,7 +2525,7 @@ SPELLS.push(
   { id:'bloodgodscovenant', name:"Blood God's Covenant", mp:50, type:'bloodbuff', stat:'str', power:14, dur:22, selfCostPct:0.18, range:0, school:'Blood Magic', tier:5, desc:'A pact sealed in blood, granting terrible strength for a terrible price.' },
   { id:'crimsonlance', name:'Crimson Lance', mp:18, type:'lifetap', power:[16,26], range:5, school:'Blood Magic', tier:2, desc:'A spear of your own vitality, hurled and drawn back doubled.' },
   // ---- Illusion: more tiers ----
-  { id:'mirrorarmy', name:'Mirror Army', mp:28, type:'buff', stat:'crit', power:0.25, dur:16, range:0, school:'Illusion', tier:3, desc:'A dozen illusory duplicates make you nearly impossible to pin down.' },
+  { id:'mirrorarmy', name:'Mirror Army', mp:28, type:'buff', stat:'evasion', power:0.22, dur:16, range:0, school:'Illusion', tier:3, desc:'A dozen illusory duplicates make you nearly impossible to pin down.' },
   { id:'nightmarerealm', name:'Nightmare Realm', mp:48, type:'debuff', stat:'fear', power:1, dur:14, range:6, aoe:true, aoeRadius:3, school:'Illusion', tier:5, desc:'For a moment, everyone nearby is trapped in their own worst dream.' },
   { id:'massconfusion', name:'Mass Confusion', mp:26, type:'debuff', stat:'dex', power:-10, dur:10, range:5, aoe:true, aoeRadius:2, gasCloud:true, gasKind:'confuse', school:'Illusion', tier:3, desc:'A disorienting field that leaves everyone within it stumbling.' },
   // ---- Restoration: more tiers ----
@@ -3545,7 +3545,14 @@ function placeItemAt(x, y, it) {
   else { const t = curTileAt(x, y); if (t) t.items.push(it); }
 }
 
-function blocksSight(x, y) { const t = curTileAt(x, y); return !t || !t.walkable || t.smokeTurns > 0; }
+function blocksSight(x, y) {
+  const t = curTileAt(x, y);
+  if (!t) return true;
+  if (t.smokeTurns > 0) return true;
+  // water and chasms are see-through/see-over -- they shouldn't cast shadows or hide what's beyond them
+  if (t.feature === 'water' || t.feature === 'chasm' || t.biome === 'ocean') return false;
+  return !t.walkable;
+}
 
 // ===================== TERRAIN EFFECTS ENGINE: real fire/smoke/gas physics =====================
 // Fire spreads to flammable neighbors, is put out by water (producing a burst of steam/smoke
@@ -3556,25 +3563,45 @@ function blocksSight(x, y) { const t = curTileAt(x, y); return !t || !t.walkable
 // an area you can no longer see or interact with.
 let activeFxTiles = []; // [{ t, x, y }]
 function isWaterTile(t) { return !!(t && (t.feature === 'water' || t.biome === 'ocean')); }
+// ---- shared tile-transform helpers: water and chasm conversion happen from several places
+// (pond generation, chasm generation, bridge collapse, ice thaw) and used to repeat the same
+// five-field literal at every call site. Consolidated here so there's one place to adjust the
+// look of water/chasm terrain instead of four. ----
+function setTileWater(t) { t.walkable = false; t.feature = 'water'; t.glyph = '~'; t.color = '#2a4a6a'; t.bg = '#0a141c'; }
+function setTileChasm(t) { t.walkable = false; t.feature = 'chasm'; t.glyph = '\u2248'; t.color = '#1a1a22'; t.bg = '#000000'; }
 function isFlammableTile(t) {
   if (!t || !t.walkable || isWaterTile(t)) return false;
   return t.biome === 'forest' || t.biome === 'denseforest' || t.biome === 'plains' || t.biome === 'swamp' ||
-         t.feature === 'door' || t.feature === 'tentwall' || t.feature === 'grass';
+         t.feature === 'door' || t.feature === 'tentwall' || t.feature === 'grass' || t.feature === 'woodbridge';
 }
 function trackFxTile(t, x, y) { if (!t._fxTracked) { t._fxTracked = true; activeFxTiles.push({ t, x, y }); } }
 function igniteTile(x, y, turns) {
   const t = curTileAt(x, y);
   if (!t || !t.walkable) return false;
-  if (isWaterTile(t)) { addSmoke(x, y, 2); return false; } // fire meets water -> hiss of steam, no burning
+  if (isWaterTile(t)) { steamBurst(x, y); return false; } // fire meets water -> scalding steam, no burning
   t.fireTurns = Math.max(t.fireTurns || 0, turns);
   trackFxTile(t, x, y);
   return true;
 }
-function addSmoke(x, y, turns) {
+// Fire meeting water doesn't just fizzle -- it flashes into a burst of scalding steam that
+// briefly blocks sight AND burns anyone caught standing in the water when it happened, then
+// settles into ordinary lingering smoke/mist.
+function steamBurst(x, y) {
   const t = curTileAt(x, y);
   if (!t) return;
-  t.smokeTurns = Math.max(t.smokeTurns || 0, turns);
+  const e = entityAt(x, y);
+  if (e && e.alive !== false) {
+    const dmg = randInt(Math.random, 2, 5);
+    e.hp -= dmg;
+    log(`${e === player ? 'You are' : e.name + ' is'} scalded by a burst of steam (${dmg}).`);
+    if (e.hp <= 0) onDeath(e, null);
+  }
+  t.smokeTurns = Math.max(t.smokeTurns || 0, 3);
   trackFxTile(t, x, y);
+  for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+    const nt = curTileAt(x+dx, y+dy);
+    if (nt && !isWaterTile(nt)) { nt.smokeTurns = Math.max(nt.smokeTurns || 0, 2); trackFxTile(nt, x+dx, y+dy); }
+  }
 }
 function addGasCloud(x, y, turns, power, kind) {
   const t = curTileAt(x, y);
@@ -3605,9 +3632,42 @@ function affectEntityWithGas(e, kind, power) {
   if (!resisted) e.statusPoison = (e.statusPoison||0) + Math.max(1, Math.round(power/2));
   return resisted ? null : `${e===player?'You breathe':e.name+' breathes'} in the toxic fumes.`;
 }
+// ---- typed traps: dart/spike are single-tile, fire/gas/alarm affect an area or the whole
+// level, same as the equivalent spells and grenades. Nothing here is a special case bolted onto
+// the trap system alone -- it's the same igniteArea/gasArea/engaged-monster machinery. ----
+function triggerTrapAt(t, x, y) {
+  const kind = t.trapType || 'dart';
+  Sound.play('trap');
+  if (kind === 'dart') {
+    const dmg = randInt(Math.random, 3, 8);
+    player.hp -= dmg;
+    log(`A dart trap fires from the wall! You take ${dmg} damage.`);
+  } else if (kind === 'spike') {
+    const dmg = randInt(Math.random, 8, 16);
+    player.hp -= dmg;
+    if (!(getBuff('resistpoison') > 0)) player.statusPoison = (player.statusPoison||0) + 2;
+    log(`Rusty spikes punch up through the floor! You take ${dmg} damage and feel a festering sting.`);
+  } else if (kind === 'fire') {
+    log('A fire trap ignites around you!');
+    igniteArea(x, y, 2);
+  } else if (kind === 'gas') {
+    log('A gas trap hisses open, filling the area with fumes!');
+    gasArea(x, y, 2, 7, 4, 'poison');
+  } else if (kind === 'alarm') {
+    log('An alarm rune flares — you hear things stirring in the dark!');
+    for (const m of curMonsters()) { if (m.alive && chebyshev(m.x,m.y,x,y) <= 22 && Math.random() < 0.6) m.engaged = true; }
+  } else if (kind === 'floorbreak') {
+    const dmg = randInt(Math.random, 6, 14);
+    player.hp -= dmg;
+    log(`The floor gives way beneath you! You fall and take ${dmg} damage.`);
+    t.feature = 'brokenfloor'; t.glyph = ':'; t.color = '#4a3a2a';
+  }
+  if (player.hp <= 0) onDeath(player, null);
+}
 function processTerrainEffects() {
   if (!activeFxTiles.length) return;
   const stillActive = [];
+  const pendingSpreads = []; // [[x,y,turns,power,kind]] -- staged so we don't grow the array mid-iteration
   for (const entry of activeFxTiles) {
     const { t, x, y } = entry;
     let keep = false;
@@ -3629,6 +3689,13 @@ function processTerrainEffects() {
       t.fireTurns--;
       t.smokeTurns = Math.max(t.smokeTurns || 0, 3);
       keep = true;
+      if (t.feature === 'woodbridge' && !entityAt(x, y) && Math.random() < 0.2) {
+        const over = t.bridgeOver || 'chasm';
+        if (over === 'water') setTileWater(t);
+        else setTileChasm(t);
+        t.fireTurns = 0;
+        log('The burning bridge gives way and collapses!');
+      }
     } else if (t.smokeTurns > 0) {
       t.smokeTurns--;
       if (t.smokeTurns > 0) keep = true;
@@ -3640,16 +3707,49 @@ function processTerrainEffects() {
         if (msg) log(msg);
         if (occupant.hp <= 0) onDeath(occupant, null);
       }
+      // A gas cloud billows outward while it's fresh (high remaining turns/power), then, as it
+      // thins out, stops spreading and just lingers before dispersing entirely -- so poison gas
+      // genuinely fills a room over a few turns instead of sitting frozen in its blast radius.
+      if (t.gasTurns > 1 && Math.random() < 0.3) {
+        const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+        for (const [dx,dy] of dirs) {
+          const nt = curTileAt(x+dx, y+dy);
+          if (nt && nt.walkable && !isWaterTile(nt) && !(nt.gasTurns > 0) && Math.random() < 0.35) {
+            pendingSpreads.push([x+dx, y+dy, t.gasTurns - 1, Math.max(1, Math.round((t.gasPower||3) * 0.8)), t.gasKind]);
+          }
+        }
+      }
       t.gasTurns--;
       keep = true;
+    }
+    if (t.frozenTurns > 0) {
+      t.frozenTurns--;
+      if (t.frozenTurns <= 0) {
+        const occ = entityAt(x, y);
+        if (t.wasChasm) {
+          if (occ) {
+            const dmg = randInt(Math.random, 6, 14);
+            occ.hp -= dmg;
+            log(`${occ===player?'You':occ.name} plunge partway as the thawing ice gives way! (${dmg} damage)`);
+            if (occ.hp <= 0) onDeath(occ, null);
+          }
+          setTileChasm(t);
+        } else {
+          setTileWater(t);
+        }
+        t.wasChasm = false;
+        log('The ice thaws away.');
+      } else keep = true;
     }
     if (keep) stillActive.push(entry); else t._fxTracked = false;
   }
   activeFxTiles = stillActive;
+  for (const [sx, sy, sturns, spower, skind] of pendingSpreads) addGasCloud(sx, sy, sturns, spower, skind);
 }
 function clearAreaFx() {
   for (const entry of activeFxTiles) entry.t._fxTracked = false;
   activeFxTiles = [];
+  activeDecoys = []; // location-tracked; a decoy from the area you're leaving makes no sense elsewhere
 }
 
 function hasLOS(x0, y0, x1, y1) {
@@ -3845,31 +3945,160 @@ function blinkPlayer(range) {
   }
   log('The teleport fails to find a safe landing spot.');
 }
-// ---- player-directed teleportation: every blink/teleport ability now lets you pick where you land
-// (click the map) instead of picking a random reachable tile for you ----
-let pendingBlink = null; // { spell, range }
-function beginBlinkTargeting(spell) {
+// ---- blink-family differentiation: 15+ abilities used to all just move you to a clicked tile
+// with nothing else going on. Each now does something distinct on top of the same core
+// movement, grounded in its own name/school/flavor -- Ride the Lightning genuinely damages
+// everything in the line you cross, Phantom Step leaves a decoy, Vestigial Wings and Stellar
+// Drift fly over line-of-sight-blocking obstacles, Grapple Hook is a stop-short pull instead of
+// a free teleport, Spring-Loaded Heels cushions your landing against traps, and so on. The
+// plain 'blink' spell stays the unmodified baseline on purpose. ----
+const BLINK_IGNORE_LOS = new Set(['quantumblink','vestigialwings','stellardrift','warpstep']);
+const BLINK_GRAPPLE_STYLE = new Set(['grapplelauncher']);
+let activeDecoys = []; // [{x,y,turns}] -- Phantom Step's lingering double, can actually distract monsters
+function applyBlinkFlavor(spell, fromX, fromY, toX, toY) {
+  const id = spell.id;
+  if (id === 'phantomstep') {
+    activeDecoys.push({ x: fromX, y: fromY, turns: 3 });
+    log('A phantom double lingers where you stood.');
+  } else if (id === 'timeskip') {
+    applyBuff('dex', 4, 3);
+    log("Time hasn't caught up with you yet — you feel impossibly quick.");
+  } else if (id === 'shadowstep') {
+    player.buffs['crit'] = { power: 0.6, turns: 1 };
+    log('You are wreathed in shadow — your next strike will land true.');
+  } else if (id === 'blinkdrive') {
+    if (Math.random() < 0.25) {
+      log('The prototype drive misfires! A pulse of feedback bursts from where you stood.');
+      for (const m of curMonsters()) { if (m.alive && chebyshev(m.x,m.y,fromX,fromY) <= 2) m.statusConfuse = (m.statusConfuse||0)+2; }
+    }
+  } else if (id === 'phaseshiftboots') {
+    applyBuff('invis', 1, 1);
+    log('You are still half-phased — briefly impossible to pin down.');
+  } else if (id === 'quantumblink') {
+    log('Space folded around every obstacle in the way.');
+  } else if (id === 'springheels') {
+    const dt = curTileAt(toX, toY);
+    if (dt && dt.hiddenTrap && !dt.trapTriggered) log('Your spring-loaded landing absorbs the impact — you never even felt the hidden trap beneath you.');
+  } else if (id === 'vestigialwings') {
+    log('Your ragged wings carried you clean over whatever was in the way.');
+  } else if (id === 'warpstep') {
+    if (Math.random() < 0.35) {
+      const hit = hostilesWithinRadius(toX, toY, 1);
+      hit.forEach(m => { const dmg = randInt(Math.random, 2, 6); m.hp -= dmg; log(`Reality lashes out at ${m.name} for ${dmg} eldritch damage!`); if (m.hp<=0) onDeath(m, player); });
+    }
+  } else if (id === 'astralprojection') {
+    for (let dy=-4; dy<=4; dy++) for (let dx=-4; dx<=4; dx++) {
+      if (dx*dx+dy*dy > 16) continue;
+      const t = curTileAt(toX+dx, toY+dy);
+      if (t && hasLOS(toX, toY, toX+dx, toY+dy)) t.seen = true;
+    }
+    log('Your mind maps the area around you before your body arrives.');
+  } else if (id === 'flickeringform') {
+    if (Math.random() < 0.4) {
+      applyBuff('invis', 1, 1);
+      log('Your form flickers out of phase for an instant.');
+    }
+  } else if (id === 'stellardrift') {
+    log('You drifted through the space between spaces, past anything solid.');
+  } else if (id === 'ridethelightning') {
+    // You genuinely become lightning for the trip -- everything on the line takes damage.
+    const steps = Math.max(Math.abs(toX-fromX), Math.abs(toY-fromY));
+    let hitAny = 0;
+    for (let i = 1; i < steps; i++) {
+      const lx = Math.round(fromX + (toX-fromX)*i/steps), ly = Math.round(fromY + (toY-fromY)*i/steps);
+      const e = entityAt(lx, ly);
+      if (e && e.alive !== false) { const dmg = randInt(Math.random, 4, 9); e.hp -= dmg; log(`The bolt tears through ${e.name} for ${dmg} lightning damage!`); hitAny++; if (e.hp<=0) onDeath(e, player); }
+    }
+    if (hitAny) log(`You arrive crackling with residual static.`);
+  } else if (id === 'temporalrift') {
+    const hit = hostilesWithinRadius(fromX, fromY, 2);
+    hit.forEach(m => { m.statusSlow = (m.statusSlow||0) + 3; });
+    if (hit.length) log(`Temporal ripples linger where you left, slowing ${hit.length} nearby foe${hit.length===1?'':'s'}.`);
+  }
+}
+
+// ============ UNIFIED TILE TARGETING ============
+// Every offensive/aimed spell, thrown item, and teleport funnels through this one system now
+// instead of auto-locking onto whatever's nearest. Click ANY tile you can see and reach --
+// open ground, a tree, water, an ally, yourself, empty air past a monster's shoulder -- and
+// the game resolves whatever that tile actually contains or is made of. This is what lets you
+// deliberately miss an enemy to torch the dry grass behind them, drop a gas grenade in a
+// doorway instead of on top of your own feet, or blink to a ledge nobody's standing on.
+let pendingTarget = null; // { kind:'blink'|'spell'|'throw', spell, item, range, aoeRadius }
+function beginTileTargeting(kind, opts) {
   closeModal();
-  pendingBlink = { spell, range: spell.power || 10 };
-  gameState = 'blinktarget';
-  log(`Choose where to teleport (click a tile within ${pendingBlink.range}). Esc to cancel.`);
+  pendingTarget = Object.assign({ kind }, opts);
+  gameState = 'tiletarget';
 }
-function confirmBlinkTarget(wx, wy) {
-  if (!pendingBlink) return;
-  const range = pendingBlink.range;
+function cancelTileTargeting() { pendingTarget = null; gameState = 'playing'; closeModal(); log('You hold back.'); }
+function confirmTileTarget(wx, wy) {
+  if (!pendingTarget) return;
+  const p = pendingTarget;
   const dx = wx - player.x, dy = wy - player.y;
-  if (Math.max(Math.abs(dx), Math.abs(dy)) > range) { log('Too far away.'); return; }
-  if (!curWalkable(wx, wy) || entityAt(wx, wy)) { log("You can't land there."); return; }
-  if (!hasLOS(player.x, player.y, wx, wy)) { log("You can't see a clear path there."); return; }
-  const spell = pendingBlink.spell;
-  if (!paySpellCost(spell)) { log(spell.mp ? 'Not enough mana.' : 'You are too weak for that.'); return; }
-  player.x = wx; player.y = wy;
-  Sound.play('blink');
-  log('You teleport in a flash of light.');
-  pendingBlink = null; gameState = 'playing';
-  endTurn();
+  if (Math.max(Math.abs(dx), Math.abs(dy)) > p.range) { log('Too far away.'); return; }
+  const ignoreLOS = p.kind === 'blink' && p.spell && BLINK_IGNORE_LOS.has(p.spell.id);
+  if (!ignoreLOS && !hasLOS(player.x, player.y, wx, wy)) { log("You can't see a clear path there."); return; }
+  if (p.kind === 'blink') {
+    let tx = wx, ty = wy;
+    if (p.spell && BLINK_GRAPPLE_STYLE.has(p.spell.id)) {
+      // Grapple Hook: not a free teleport -- it reels you along the line toward the clicked
+      // tile and stops at the last open ground before a wall, or adjacent to the first monster
+      // in the way (a real gap-closer, not just short-range blink).
+      const steps = Math.max(Math.abs(dx), Math.abs(dy)) || 1;
+      let landX = player.x, landY = player.y;
+      for (let i = 1; i <= steps; i++) {
+        const lx = Math.round(player.x + dx*i/steps), ly = Math.round(player.y + dy*i/steps);
+        const blocker = entityAt(lx, ly);
+        if (blocker && blocker !== player) break;
+        if (!curWalkable(lx, ly)) break;
+        landX = lx; landY = ly;
+      }
+      tx = landX; ty = landY;
+      if (tx === player.x && ty === player.y) { log('There is nothing to grapple onto that way.'); return; }
+    } else if (!curWalkable(wx, wy) || entityAt(wx, wy)) { log("You can't land there."); return; }
+    if (!paySpellCost(p.spell)) { log(p.spell.mp ? 'Not enough mana.' : 'You are too weak for that.'); return; }
+    pendingTarget = null; gameState = 'playing';
+    const fromX = player.x, fromY = player.y;
+    player.x = tx; player.y = ty;
+    Sound.play('blink');
+    log('You teleport in a flash of light.');
+    const landTile = curTileAt(tx, ty);
+    const cushioned = p.spell && p.spell.id === 'springheels';
+    if (curIsDungeon() && landTile && landTile.hiddenTrap && !landTile.trapTriggered && !cushioned) {
+      landTile.trapTriggered = true; landTile.glyph = '^'; landTile.color = '#c93a3a';
+      if (player.trapImmune || Math.random() < (player.trapAvoidBonus || 0)) log('You spot a hidden trap just in time and step around it!');
+      else { triggerTrapAt(landTile, tx, ty); if (player.hp <= 0) { endTurn(); return; } }
+    }
+    if (p.spell) applyBlinkFlavor(p.spell, fromX, fromY, tx, ty);
+    endTurn(); return;
+  }
+  if (p.kind === 'spell') {
+    if (!paySpellCost(p.spell)) { log('Not enough resource.'); return; }
+    pendingTarget = null; gameState = 'playing';
+    resolveSpellAtTile(p.spell, wx, wy);
+    endTurn(); return;
+  }
+  if (p.kind === 'throw') {
+    pendingTarget = null; gameState = 'playing';
+    resolveThrowAtTile(p.item, wx, wy);
+    endTurn(); return;
+  }
 }
-function cancelBlinkTarget() { pendingBlink = null; gameState = 'playing'; closeModal(); log('You steady yourself - teleport cancelled.'); }
+// Enter/Space with no click: convenience auto-aim at the nearest hostile in range, for when
+// you just want the old "hit the closest thing" behavior without manually clicking.
+function quickConfirmTileTarget() {
+  if (!pendingTarget) return;
+  const t = nearestHostile(pendingTarget.range);
+  if (!t) { log('Nothing hostile in range to auto-target - click a tile to aim manually.'); return; }
+  confirmTileTarget(t.x, t.y);
+}
+// ---- legacy wrapper: existing blink/teleport abilities call this unchanged ----
+function beginBlinkTargeting(spell) {
+  const range = spell.power || 10;
+  beginTileTargeting('blink', { spell, range });
+  const verb = BLINK_GRAPPLE_STYLE.has(spell.id) ? 'Aim your grapple' : 'Choose where to teleport';
+  log(`${verb} (click a tile within ${range}). Esc to cancel.`);
+}
 
 
 // ---------------- dungeon transitions ----------------
@@ -4306,7 +4535,11 @@ const ROLE_DEATH_LOOT = {
 
 
 function removeDeadEntity(def) {
-  if (def.kind === 'ally') { player.allies = player.allies.filter(a => a !== def); return; }
+  if (def.kind === 'ally') {
+    player.lastFallenAlly = { monsterId: def.monsterId, name: def.name, turn: turnCount };
+    player.allies = player.allies.filter(a => a !== def);
+    return;
+  }
   if (curIsDungeon()) {
     const lvl = curDungeonLevel();
     lvl.monsters = lvl.monsters.filter(m => m !== def);
@@ -4425,6 +4658,59 @@ function ascend() {
   markSeen(); render();
 }
 
+// ---- chasm diving: an alternate way down a dungeon, riskier than the stairs but faster ----
+let pendingChasmJump = null;
+function promptChasmJump(cx, cy) {
+  pendingChasmJump = { x: cx, y: cy };
+  gameState = 'confirmchasm';
+  const html = `<div class="npcline">A dark chasm splits the floor here. You could jump down to the level below, but the fall will hurt.</div>
+    <div class="modal-opt" onclick="simulateKey('y')">[y] Jump down</div>
+    <div class="modal-opt" onclick="simulateKey('n')">[n] Step back</div>`;
+  renderModal('Jump Into the Chasm?', html, 'y to jump, n or Esc to cancel.');
+}
+function confirmChasmJumpChoice(key) {
+  pendingChasmJump = null;
+  const jump = key === 'y';
+  closeModal();
+  if (jump) chasmFall();
+}
+// pick a safe landing tile on the level below: open floor, not a hazard, not a hidden trap, not on a monster
+function pickChasmLanding(lvl) {
+  const candidates = [];
+  for (let y = 0; y < lvl.h; y++) {
+    for (let x = 0; x < lvl.w; x++) {
+      const t = lvl.grid[y][x];
+      if (!t || !t.walkable || t.feature === 'chasm' || t.feature === 'water' || t.hiddenTrap) continue;
+      if (lvl.monsters.some(m => m.x === x && m.y === y)) continue;
+      candidates.push({ x, y });
+    }
+  }
+  if (!candidates.length) return { x: lvl.upStairs.x, y: lvl.upStairs.y };
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+function chasmFall() {
+  const dg = curDungeon();
+  const nd = player.dungeonDepth + 1;
+  if (nd > dg.maxDepth) {
+    log("You peer into the dark below, but this already feels like the lowest reach of this place. You climb back from the edge.");
+    return;
+  }
+  clearAreaFx();
+  if (!dg.levels[nd - 1]) dg.levels[nd - 1] = generateDungeonLevel(dg.theme, nd, dg.maxDepth, dg.variant);
+  const lvl = dg.levels[nd - 1];
+  const landing = pickChasmLanding(lvl);
+  player.dungeonDepth = nd;
+  player.x = landing.x; player.y = landing.y;
+  const dmg = Math.max(1, Math.round((4 + Math.random() * 6 + nd * 0.5) * (1 - (player.fallDamageReduction || 0))));
+  Sound.play('stairs');
+  Sound.play('playerHurt');
+  log(`You leap into the chasm and plummet to depth ${nd}/${dg.maxDepth}, landing hard. You take ${dmg} damage.`);
+  player.hp -= dmg;
+  relocateAllies();
+  if (player.hp <= 0) { onDeath(player, null); return; }
+  markSeen(); render();
+}
+
 // ---- final authoritative versions of combat/ally/loot helpers (apply talent bonuses) ----
 
 
@@ -4531,13 +4817,17 @@ function renderInventory() {
   renderModal('Inventory', html, 'Letter/click to select · Tab or click category to filter · [ ] page · Esc close');
 }
 function setInvFilter(f) { player.invFilter = f; player.invPage = 0; renderInventory(); }
+const THROWABLE_EFFECTS = new Set(['aoefire','aoefrost','aoepoison','aoeconfuse','throwdmg','scrollfire','throwaoe','throwgas','throwemp','throwslow','throwsnare']);
 function openItemAction(it, slot) {
   gameState = 'itemaction'; invSelected = it; invSelectedSlot = slot || null;
   let opts = [];
-  if (slot) opts.push(['u', 'Unequip']);
-  else {
+  if (slot) {
+    opts.push(['u', 'Unequip']);
+    if (slot === 'hand' && adjacentFireTile()) opts.push(['i', 'Dip in fire (burning weapon)']);
+  } else {
     if (it.type === 'weapon' || it.type === 'armor') opts.push(['e', 'Equip']);
-    if (it.type === 'consumable' || it.type === 'scroll') opts.push(['u', 'Use']);
+    if ((it.type === 'consumable' || it.type === 'scroll') && THROWABLE_EFFECTS.has(it.effect)) opts.push(['t', 'Throw (choose target tile)']);
+    if (it.type === 'consumable' || it.type === 'scroll') opts.push(['u', THROWABLE_EFFECTS.has(it.effect) ? 'Use on self' : 'Use']);
     if (it.type === 'chest') opts.push(['u', 'Open']);
     if (it.type === 'recipe') opts.push(['u', 'Learn']);
     if (it.type === 'tome') opts.push(['u', 'Study (learn spell)']);
@@ -5066,10 +5356,11 @@ function render() {
           ctx.fillRect(sx*v.ts, sy*v.ts, v.ts, v.ts);
           ctx.restore();
         }
-        if (gameState === 'blinktarget' && pendingBlink && Math.max(Math.abs(dx),Math.abs(dy)) <= pendingBlink.range && t.walkable && !entityAt(wx,wy)) {
+        if (gameState === 'tiletarget' && pendingTarget && Math.max(Math.abs(dx),Math.abs(dy)) <= pendingTarget.range && visible &&
+            (pendingTarget.kind !== 'blink' || (t.walkable && !entityAt(wx,wy)))) {
           ctx.save();
           ctx.globalAlpha = 0.28 + 0.1 * (settings.reduceMotion ? 0 : Math.sin(turnCount * 1.6 + sx + sy));
-          ctx.fillStyle = '#5ae0ff';
+          ctx.fillStyle = pendingTarget.kind === 'blink' ? '#5ae0ff' : (pendingTarget.kind === 'throw' ? '#e0a850' : '#e05a5a');
           ctx.fillRect(sx*v.ts, sy*v.ts, v.ts, v.ts);
           ctx.restore();
         }
@@ -5187,38 +5478,6 @@ function hostilesWithinRadius(cx, cy, radius) {
   for (const n of curNPCs()) { if (n.alive && n.hostile && chebyshev(n.x,n.y,cx,cy) <= radius) out.push(n); }
   return out;
 }
-function getValidTargets(range) {
-  const out = [];
-  for (const m of curMonsters()) { if (!m.alive) continue; const d = chebyshev(m.x,m.y,player.x,player.y); if (d <= range && hasLOS(player.x,player.y,m.x,m.y)) out.push({ e: m, d }); }
-  for (const n of curNPCs()) { if (!n.alive || !n.hostile) continue; const d = chebyshev(n.x,n.y,player.x,player.y); if (d <= range && hasLOS(player.x,player.y,n.x,n.y)) out.push({ e: n, d }); }
-  out.sort((a,b) => a.d - b.d);
-  return out.map(o => o.e);
-}
-
-// ---- spellcasting v6: real AOE (multi-target) + manual target selection for bolts/debuffs ----
-let pendingSpell = null, pendingTargets = [];
-
-
-function renderSpellTargetUI() {
-  let html = `<div class="npcline">Choose a target for ${pendingSpell.name}:</div>`;
-  pendingTargets.forEach((t, i) => {
-    const letter = String.fromCharCode(97 + i);
-    const kindTag = t.kind === 'npc' ? ' (hostile NPC)' : (t.boss ? ' (BOSS)' : '');
-    html += `<div class="modal-opt" onclick="simulateKey('${letter}')">[${letter}] ${t.name}${kindTag} — HP ${Math.max(0,t.hp)}/${t.maxHp}, dist ${chebyshev(t.x,t.y,player.x,player.y)}</div>`;
-  });
-  renderModal(`Target: ${pendingSpell.name}`, html, 'Letter/click to target, Esc to cancel.');
-}
-function confirmSpellTarget(letter) {
-  const idx = letter.charCodeAt(0) - 97;
-  const t = pendingTargets[idx];
-  gameState = 'playing'; closeModal();
-  if (!t || !t.alive) { log('Invalid target.'); return; }
-  if (!paySpellCost(pendingSpell)) { log(pendingSpell.mp ? 'Not enough mana.' : 'You are too weak for that.'); return; }
-  applyEffectToTarget(pendingSpell, t);
-  endTurn();
-}
-
-
 // ---- player model v4: companions, bounties ----
 
 
@@ -5244,6 +5503,7 @@ function openChest(chestItem) {
 function dropLoot(def) {
   const items = [];
   const goldMult = 1 + (player.goldBonus || 0);
+  if (def.guaranteedDrops && def.guaranteedDrops.length) items.push(...def.guaranteedDrops);
   if (def.kind === 'monster' || def.kind === 'ally') {
     const base = MONSTER_BASES[def.monsterId];
     if (base && base.loot) items.push(...rollLoot(base.loot, Math.random));
@@ -5573,7 +5833,7 @@ function decayBounties() {
 // ---- sidebar v6: bounty display, spouse status, kingdom name ----
 
 
-// ---- input v7 (final): adds 'start' screen, 'spelltarget' selection, 'H' auto-travel-home ----
+// ---- input v7 (final): adds 'start' screen, unified 'tiletarget' free-aim selection, 'H' auto-travel-home ----
 
 
 
@@ -5667,6 +5927,14 @@ const TILE_FEATURE_DESCRIPTIONS = {
   furniture: 'A simple piece of furniture — a bed or table.', well: 'An old stone well.',
   farmland: 'Tilled farmland, crops growing in neat rows.', rubble: 'Scattered rubble and broken stone.',
   rock: 'Rough, broken rock.', tree: 'A tall tree.', cactus: 'A spiny desert cactus.',
+  chasm: 'A dark chasm plunges into the depths. You would need a bridge, flight, or a very long rope.',
+  woodbridge: 'A rough plank bridge, lashed together with rope. Wood — it would burn.',
+  lockeddoor: 'A locked door, reinforced and unyielding. It needs a matching key.',
+  leverdoor: 'A heavy mechanical door with no visible handle. Something elsewhere must release it.',
+  lever: 'A lever set into the wall. Pulling it will do something — you have no way to know what until you try.',
+  statue: 'A worn, silent statue. It blocks the way.',
+  brokenfloor: 'The shattered remains of a floor that gave way underfoot.',
+  ice: 'A slick sheet of ice, frozen solid — but it will not last forever.',
 };
 function describeTile(t) {
   if (!t) return 'Nothing but darkness.';
@@ -5742,6 +6010,7 @@ function beginBypassTravel(source) {
 function warpToDungeonEntrance() {
   const dg = curDungeon();
   if (!dg) return;
+  clearAreaFx();
   player.mode = 'overworld'; player.dungeonId = null; player.dungeonDepth = 0;
   player.x = dg.x; player.y = dg.y;
   relocateAllies();
@@ -5834,7 +6103,7 @@ function confirmTravel(letter) {
   gameState = 'playing';
   closeModal();
   pendingTravelBypass = null;
-  if (curIsDungeon()) { player.mode = 'overworld'; player.dungeonId = null; player.dungeonDepth = 0; }
+  if (curIsDungeon()) { clearAreaFx(); player.mode = 'overworld'; player.dungeonId = null; player.dungeonDepth = 0; }
   player.x = d.x; player.y = d.y;
   relocateAllies();
   log(`${bypass ? 'A surge of magic tears you away and deposits you' : 'You travel swiftly'} at ${d.label}.`);
@@ -6018,6 +6287,8 @@ function applyEffectToTarget(spell, t) {
     t.hp -= dmg;
     log(`Your ${spell.name} strikes ${t.name} for ${dmg}.`);
     if (spell.type === 'drain') { player.hp = Math.min(player.maxHp, player.hp + Math.floor(dmg * 0.5)); log('You feel invigorated.'); }
+    if (spell.poison && t.hp > 0) { t.statusPoison = (t.statusPoison || 0) + spell.poison; log(`${t.name} is poisoned!`); }
+    if (spell.stagger && t.hp > 0) { t.statusSlow = Math.max(t.statusSlow || 0, 2); log(`${t.name} is staggered!`); }
     if (t.hp <= 0) onDeath(t, player);
     if (spell.destructive) { const d = scorchArea(t.x, t.y, 2); if (d>0) log(`The blast scorches the land, destroying ${d} trees!`); }
     if (spell.igniteGround) { igniteTile(t.x, t.y, 4); }
@@ -6025,7 +6296,9 @@ function applyEffectToTarget(spell, t) {
   }
   if (spell.type === 'debuff') {
     if (spell.stat === 'poison') t.statusPoison = (t.statusPoison || 0) + spell.power;
-    else if (spell.stat === 'dex') t.dex = Math.max(1, t.dex + spell.power);
+    else if (spell.stat === 'dex') { t.dex = Math.max(1, t.dex + spell.power); if (spell.id === 'garrote') t.statusSlow = Math.max(t.statusSlow || 0, 4); }
+    else if (spell.stat === 'str') { t.str = Math.max(1, t.str + spell.power); log(`${t.name}'s strength falters.`); }
+    else if (spell.stat === 'int') { t.int = Math.max(1, (t.int||10) + spell.power); if (t.mp !== undefined) t.mp = Math.max(0, t.mp - Math.abs(spell.power)); }
     else if (spell.stat === 'fear') t.statusFear = spell.dur;
     else if (spell.stat === 'confuse') t.statusConfuse = spell.dur;
     else if (spell.stat === 'armor') t.armor = Math.max(0, (t.armor || 0) + spell.power);
@@ -6079,13 +6352,21 @@ function castSpell(spellId) {
     beginBypassTravel({ type: 'ability', spell });
     return;
   }
-  if (spell.type === 'detectability' || spell.id === 'detect') {
+  if (spell.type === 'detectability' || spell.type === 'utility' || spell.id === 'detect') {
+    if (spell.id === 'blink') { beginBlinkTargeting(Object.assign({}, spell, { power: spell.power || 5 })); return; }
     if (!paySpellCost(spell)) { log('Not enough mana.'); return; }
-    const mons = curMonsters().filter(m => m.alive && chebyshev(m.x,m.y,player.x,player.y) <= 15);
+    const scanRadius = spell.id === 'omniscan' ? 25 : 15;
+    const mons = curMonsters().filter(m => m.alive && chebyshev(m.x,m.y,player.x,player.y) <= scanRadius);
     log(mons.length ? `You sense ${mons.length} creature(s) nearby.` : 'You sense nothing nearby.');
+    if (spell.id === 'omniscan') {
+      for (const m of mons) for (let dy=-3; dy<=3; dy++) for (let dx=-3; dx<=3; dx++) {
+        const t = curTileAt(m.x+dx, m.y+dy);
+        if (t && dx*dx+dy*dy <= 9) t.seen = true;
+      }
+      if (mons.length) log('The full-spectrum scan maps the ground around each of them.');
+    }
     endTurn(); return;
   }
-  if (spell.id === 'blink') { beginBlinkTargeting(Object.assign({}, spell, { power: spell.power || 5 })); return; }
   if (spell.type === 'transmute') {
     const mat = player.inventory.find(i => i.type === 'material');
     if (!mat) { log('You have no crafting materials to transmute.'); return; }
@@ -6125,11 +6406,51 @@ function castSpell(spellId) {
     if (a) { removeItemAt(corpse.x, corpse.y, corpse.item.uid); log(`The corpse rises as ${a.name}, bound to your will!`); }
     endTurn(); return;
   }
+  if (spell.id === 'massheal') {
+    if (!paySpellCost(spell)) { log('Not enough resource.'); return; }
+    const amt = randInt(Math.random, spell.power[0], spell.power[1]);
+    player.hp = Math.min(player.maxHp, player.hp + amt);
+    let healedAllies = 0;
+    for (const a of curAllies()) { if (a.hp < a.maxHp) { a.hp = Math.min(a.maxHp, a.hp + amt); healedAllies++; } }
+    log(`A wave of light heals you for ${amt}${healedAllies ? `, and ${healedAllies} nearby ally/allies` : ''}.`);
+    endTurn(); return;
+  }
+  if (spell.id === 'reviveally') {
+    const fallen = player.lastFallenAlly;
+    if (!fallen || turnCount - fallen.turn > 40) { log('No ally has fallen recently enough to pull back.'); return; }
+    if (!paySpellCost(spell)) { log('Not enough resource.'); return; }
+    const a = spawnAlly(fallen.monsterId, 0, fallen.name);
+    if (a) { player.lastFallenAlly = null; log(`${a.name} gasps back to life, pulled back from the brink!`); }
+    else log('There is no room nearby to bring them back.');
+    endTurn(); return;
+  }
+  if (spell.id === 'sanctuaryfield') {
+    if (!paySpellCost(spell)) { log('Not enough resource.'); return; }
+    const amt = randInt(Math.random, spell.power[0], spell.power[1]);
+    player.hp = Math.min(player.maxHp, player.hp + amt);
+    const wasAfraid = player.statusFear > 0;
+    player.statusFear = 0;
+    log(`A field of protective light mends ${amt} damage${wasAfraid ? ' and steadies your nerves' : ''}.`);
+    endTurn(); return;
+  }
   if (spell.type === 'heal') {
     if (!paySpellCost(spell)) { log('Not enough resource.'); return; }
     const amt = randInt(Math.random, spell.power[0], spell.power[1]);
     player.hp = Math.min(player.maxHp, player.hp + amt);
     log(`You are healed for ${amt}.`);
+    endTurn(); return;
+  }
+  if (spell.id === 'rallyingbanner') {
+    if (!paySpellCost(spell)) { log('Not enough resource.'); return; }
+    applyBuff(spell.stat, spell.power, spell.dur);
+    let rallied = 0;
+    for (const a of curAllies()) {
+      const healAmt = Math.round(a.maxHp * 0.15);
+      a.hp = Math.min(a.maxHp, a.hp + healAmt);
+      a.str += Math.round(spell.power * 0.5);
+      rallied++;
+    }
+    if (rallied) log(`The banner steels ${rallied} nearby ally/allies as well!`);
     endTurn(); return;
   }
   if (spell.type === 'buff') {
@@ -6153,34 +6474,150 @@ function castSpell(spellId) {
     log(`The corpse detonates, shredding ${hit.length} foe${hit.length===1?'':'s'}!`);
     endTurn(); return;
   }
-  if (spell.aoe) {
-    const targets = getValidTargets(spell.range);
-    if (!targets.length) { log('No target in range.'); return; }
-    if (!paySpellCost(spell)) { log('Not enough resource.'); return; }
-    const epicenter = targets[0];
-    const hit = hostilesWithinRadius(epicenter.x, epicenter.y, spell.aoeRadius);
-    hit.forEach(t => applyEffectToTarget(spell, t));
-    log(`${spell.name} engulfs ${hit.length} foe${hit.length===1?'':'s'} near ${epicenter.name}!`);
-    if (spell.destructive) { const d = scorchArea(epicenter.x, epicenter.y, spell.aoeRadius+1); if (d>0) log(`The blast scorches the land, destroying ${d} trees!`); }
-    if (spell.igniteGround) { const n = igniteArea(epicenter.x, epicenter.y, spell.aoeRadius+1); if (n>0) log(`Flames catch and spread across the ground!`); }
-    if (spell.gasCloud) { gasArea(epicenter.x, epicenter.y, spell.dur || 6, spell.power || 4, spell.gasKind); log(`A cloud of ${spell.gasKind === 'confuse' ? 'disorienting fumes' : 'noxious gas'} billows out and lingers!`); }
-    endTurn(); return;
-  }
   const manualTypes = ['damage','drain','debuff','execute','smite','lifetap'];
-  if (manualTypes.includes(spell.type)) {
-    const targets = getValidTargets(spell.range);
-    if (!targets.length) { log('No target in range.'); return; }
-    if (targets.length === 1) {
-      if (!paySpellCost(spell)) { log('Not enough resource.'); return; }
-      applyEffectToTarget(spell, targets[0]);
-      endTurn(); return;
-    }
-    pendingSpell = spell; pendingTargets = targets;
-    gameState = 'spelltarget';
-    renderSpellTargetUI();
+  if (spell.aoe || manualTypes.includes(spell.type)) {
+    beginTileTargeting('spell', { spell, range: spell.range, aoeRadius: spell.aoeRadius || 0 });
+    const aoeTxt = spell.aoe ? `, blast radius ${spell.aoeRadius}` : '';
+    log(`Aim ${spell.name} (range ${spell.range}${aoeTxt}) — click a tile, or press Enter/Space to snap to the nearest foe. Esc to cancel.`);
     return;
   }
   log('Nothing happens.');
+}
+
+// ---- resolving a spell against whatever is actually on the chosen tile: an entity, terrain,
+// or nothing at all. AOE spells sweep every tile in the blast radius independently, so a
+// fireball dropped in a doorway can catch an ally on one side and set a tapestry alight on the
+// other, and a gas grenade thrown into an empty room still fills it even with no one to hit. ----
+function tilesInRadius(cx, cy, radius) {
+  const out = [];
+  for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
+    if (dx*dx + dy*dy > radius*radius) continue;
+    out.push([cx + dx, cy + dy]);
+  }
+  return out;
+}
+function applyTerrainInteraction(spell, x, y) {
+  const t = curTileAt(x, y);
+  if (!t) return;
+  if (spell.igniteGround) {
+    if (isWaterTile(t)) steamBurst(x, y);
+    else igniteTile(x, y, 4 + randInt(Math.random, 0, 3));
+  }
+  if (spell.destructive && (t.feature === 'tree' || t.feature === 'cactus')) {
+    t.feature = 'scorched'; t.glyph = ','; t.color = '#4a3a2a'; t.walkable = true;
+  }
+  if (spell.gasCloud) addGasCloud(x, y, spell.dur || 6, spell.power || 4, spell.gasKind);
+  if (spell.frost) {
+    if (isWaterTile(t) || t.feature === 'chasm') {
+      const wasChasm = t.feature === 'chasm';
+      t.walkable = true; t.feature = 'ice'; t.wasChasm = wasChasm;
+      t.glyph = '='; t.color = '#bfe8f5'; t.bg = '#0d1c22'; t.frozenTurns = 7;
+      trackFxTile(t, x, y);
+      log(wasChasm ? 'A sheet of ice bridges the chasm — but not for long.' : 'The water freezes solid underfoot.');
+    }
+    if (t.fireTurns > 0) { t.fireTurns = 0; log('The flames are snuffed out by sudden cold.'); }
+    if (t.gasTurns > 0) { t.gasTurns = 0; log('The gas cloud freezes solid and falls as harmless frost.'); }
+  }
+  if (spell.groundShake) {
+    if (t.feature === 'woodbridge' && !entityAt(x, y) && Math.random() < 0.4) {
+      const over = t.bridgeOver || 'chasm';
+      if (over === 'water') setTileWater(t);
+      else setTileChasm(t);
+      log('The tremor shakes the bridge apart!');
+    }
+    if (t.feature === 'statue' && Math.random() < 0.3) {
+      t.walkable = true; t.feature = 'rubble'; t.glyph = '%'; t.color = '#5a5248';
+      log(`${t.statueName || 'A statue'} topples in the tremor!`);
+    }
+  }
+}
+// ---- chain lightning: arcs entity-to-entity by proximity, not tile-radius -- can round
+// corners an AOE never would, at falling damage per jump. ----
+function chainLightningFrom(spell, x, y, hitSet, hopsLeft, dmgMult) {
+  if (hopsLeft <= 0) return;
+  let best = null, bestD = Infinity;
+  for (const m of curMonsters()) {
+    if (!m.alive || hitSet.has(m)) continue;
+    const d = chebyshev(m.x, m.y, x, y);
+    if (d <= 3 && d < bestD) { best = m; bestD = d; }
+  }
+  if (!best) return;
+  hitSet.add(best);
+  const dmg = Math.max(1, Math.round(randInt(Math.random, spell.power[0], spell.power[1]) * dmgMult));
+  best.hp -= dmg;
+  log(`The lightning arcs to ${best.name} for ${dmg} damage!`);
+  if (best.hp <= 0) onDeath(best, player);
+  else chainLightningFrom(spell, best.x, best.y, hitSet, hopsLeft - 1, dmgMult * 0.65);
+}
+// ---- knockback: pushes a hit entity away from the blast in a straight line. Knocked to the
+// edge of a chasm, they take real damage instead of just sliding harmlessly to a stop. ----
+// ---- shared displacement engine for knockback (push away from an origin) and gravity pull
+// (drag toward one) -- identical chasm-edge-damage and wall-stopping logic either direction,
+// so both go through one function instead of two near-duplicate copies. ----
+function displaceEntity(e, originX, originY, maxTiles, pull) {
+  let dx = pull ? (originX - e.x) : (e.x - originX);
+  let dy = pull ? (originY - e.y) : (e.y - originY);
+  dx = dx === 0 ? 0 : (dx > 0 ? 1 : -1); dy = dy === 0 ? 0 : (dy > 0 ? 1 : -1);
+  if (!pull && dx === 0 && dy === 0) dx = Math.random() < 0.5 ? 1 : -1;
+  for (let i = 0; i < maxTiles; i++) {
+    const nx = e.x + dx, ny = e.y + dy;
+    if (pull && nx === originX && ny === originY) break; // don't drag it on top of the impact point itself
+    const nt = curTileAt(nx, ny);
+    if (nt && nt.feature === 'chasm') {
+      const dmg = randInt(Math.random, 10, 20);
+      e.hp -= dmg;
+      log(`${e===player?'You are':e.name+' is'} ${pull ? 'dragged' : 'knocked'} to the edge of the chasm${pull ? '' : ', nearly falling in'}! (${dmg} damage)`);
+      if (e.hp <= 0) onDeath(e, e === player ? null : player);
+      break;
+    }
+    if (!curWalkable(nx, ny) || entityAt(nx, ny)) break;
+    e.x = nx; e.y = ny;
+  }
+}
+function gravityPullEntity(e, towardX, towardY, maxTiles) { displaceEntity(e, towardX, towardY, maxTiles, true); }
+function knockbackEntity(e, fromX, fromY, maxTiles) { displaceEntity(e, fromX, fromY, maxTiles, false); }
+function resolveSpellAtTile(spell, wx, wy) {
+  const dmgSpell = ['damage','drain','debuff','execute','smite','lifetap'].includes(spell.type);
+  if (spell.aoe) {
+    const tiles = tilesInRadius(wx, wy, spell.aoeRadius || 1);
+    let hitCount = 0;
+    const hitEntities = [];
+    for (const [tx, ty] of tiles) {
+      if (!hasLOS(wx, wy, tx, ty)) continue; // blast doesn't punch through walls from its own center
+      const e = entityAt(tx, ty);
+      if (e && e.alive !== false && dmgSpell) { applyEffectToTarget(spell, e); hitCount++; if (e.alive !== false && e.hp > 0) hitEntities.push(e); }
+      applyTerrainInteraction(spell, tx, ty);
+    }
+    log(hitCount ? `${spell.name} erupts, catching ${hitCount} in the blast!` : `${spell.name} erupts against empty ground.`);
+    if (spell.knockback) hitEntities.forEach(e => knockbackEntity(e, wx, wy, spell.knockback));
+    if (spell.gravityPull) hitEntities.forEach(e => gravityPullEntity(e, wx, wy, spell.gravityPull));
+    if (spell.chainLightning && hitEntities.length) chainLightningFrom(spell, hitEntities[0].x, hitEntities[0].y, new Set(hitEntities), 3, 0.65);
+    return;
+  }
+  if (spell.pierceLine) {
+    const steps = Math.max(Math.abs(wx-player.x), Math.abs(wy-player.y)) || 1;
+    let hitCount = 0;
+    for (let i = 1; i <= steps; i++) {
+      const lx = Math.round(player.x + (wx-player.x)*i/steps), ly = Math.round(player.y + (wy-player.y)*i/steps);
+      if (!curWalkable(lx, ly) && !(lx===wx && ly===wy)) break; // stops at a wall, but still resolves the final tile
+      const e2 = entityAt(lx, ly);
+      if (e2 && e2.alive !== false && dmgSpell) { applyEffectToTarget(spell, e2); hitCount++; }
+    }
+    log(hitCount ? `${spell.name} punches clean through, hitting ${hitCount} in its path!` : `${spell.name} tears through empty air.`);
+    applyTerrainInteraction(spell, wx, wy);
+    return;
+  }
+  const e = entityAt(wx, wy);
+  if (e && e.alive !== false && dmgSpell) {
+    applyEffectToTarget(spell, e);
+    if (e.alive !== false && e.hp > 0) {
+      if (spell.knockback) knockbackEntity(e, player.x, player.y, spell.knockback);
+      if (spell.gravityPull) gravityPullEntity(e, player.x, player.y, spell.gravityPull);
+      if (spell.chainLightning) chainLightningFrom(spell, e.x, e.y, new Set([e]), 3, 0.65);
+    }
+  }
+  else log(`${spell.name} strikes empty ground.`);
+  applyTerrainInteraction(spell, wx, wy);
 }
 
 // ---- player model v6: Charge (cybernetics), Corruption (eldritch), installed/known lists ----
@@ -6219,7 +6656,8 @@ function doAttack(att, def) {
   const dmgRange = weapon ? weapon.dmg : (att.atk || [1, 3]);
   const attName = isPlayer ? 'You' : att.name;
   const defName = def === player ? 'you' : def.name;
-  if (def === player && (player.dodgeChance || 0) > 0 && Math.random() < player.dodgeChance) { log(`You nimbly dodge ${attName === 'You' ? 'the' : att.name + "'s"} attack!`); return; }
+  const dodgeChance = (player.dodgeChance || 0) + getBuff('evasion');
+  if (def === player && dodgeChance > 0 && Math.random() < dodgeChance) { log(`You nimbly dodge ${attName === 'You' ? 'the' : att.name + "'s"} attack!`); return; }
   if (!rollHit(att, def)) {
     Sound.play(isPlayer ? 'miss' : 'enemyMiss');
     log(`${attName} miss${isPlayer ? '' : 'es'} ${defName}.`);
@@ -6239,6 +6677,11 @@ function doAttack(att, def) {
     if (weapon.fireDmg) dmg += randInt(Math.random, 0, weapon.fireDmg) * elemMult;
     if (weapon.frostDmg) dmg += randInt(Math.random, 0, weapon.frostDmg) * elemMult;
     if (weapon.poisonDmg) def.statusPoison = (def.statusPoison || 0) + weapon.poisonDmg;
+  }
+  if (isPlayer && weapon && getBuff('weaponfire') > 0) {
+    const burnDmg = randInt(Math.random, 1, getBuff('weaponfire'));
+    dmg += burnDmg;
+    if (Math.random() < 0.3) igniteTile(def.x, def.y, 3);
   }
   let defArmor = getArmorOf(def);
   if (weapon && weapon.armorPierce) defArmor = Math.max(0, defArmor - weapon.armorPierce);
@@ -6355,6 +6798,19 @@ function monsterAI(m) {
   const invisible = getBuff('invis') > 0;
   let seesPlayer = dist <= vision && hasLOS(m.x, m.y, player.x, player.y);
   if (invisible && dist > 1) { seesPlayer = false; m.engaged = false; }
+
+  // ---- Phantom Step decoy: a lingering double left behind can pull unengaged monsters, or
+  // even engaged ones some of the time, into wasting a turn on empty air. ----
+  if (activeDecoys.length && !m.ambush) {
+    for (const dc of activeDecoys) {
+      const dd = chebyshev(m.x, m.y, dc.x, dc.y);
+      if (dd <= vision && hasLOS(m.x, m.y, dc.x, dc.y) && (!m.engaged || Math.random() < 0.3) && (!seesPlayer || dd < dist)) {
+        if (dd <= 1) { log(`${m.name} lashes out at empty air where a phantom stood!`); return; }
+        stepToward(m, dc.x, dc.y);
+        return;
+      }
+    }
+  }
 
   // ---- berserker: once badly wounded, surges with strength (one-time, then fights as normal) ----
   if (m.berserkHpPct && !m.berserked && m.hp <= m.maxHp * m.berserkHpPct) {
@@ -6571,9 +7027,9 @@ function generateChunk(cx, cy) {
 function generateDungeonLevel(theme, depth, maxDepth, variantId) {
   const meta = DUNGEON_THEMES[theme] || { genre: 'rooms', dtierMax: 2, tier: 'common' };
   const variant = DUNGEON_VARIANTS.find(v => v.id === variantId) || DUNGEON_VARIANTS[1];
-  let grid;
-  if (meta.genre === 'cave') grid = genCaveV2();
-  else grid = genRoomsV2(theme === 'labyrinth');
+  let grid, rooms;
+  if (meta.genre === 'cave') { const gen = genCaveV2(); grid = gen.grid; rooms = gen.rooms; }
+  else { const gen = genRoomsV2(theme === 'labyrinth'); grid = gen.grid; rooms = gen.rooms; }
 
   const level = { grid, depth, monsters: [], items: [], upStairs: null, downStairs: null, w: DW2, h: DH2 };
   const floors = [];
@@ -6670,30 +7126,341 @@ function generateDungeonLevel(theme, depth, maxDepth, variantId) {
     const c = choice(rng, floors);
     level.items.push({ x: c.x, y: c.y, item: makeMutagen(rng) });
   }
-  // hazards
-  if (meta.hazard === 'traps') {
-    for (let i = 0; i < 3 + Math.floor(depth/3); i++) {
-      const c = choice(rng, floors);
-      if ((c.x===up.x&&c.y===up.y)||(c.x===down.x&&c.y===down.y)) continue;
-      grid[c.y][c.x].hiddenTrap = true;
-    }
-  } else if (meta.hazard === 'poison') {
+  // ---- environmental features: traps, structures, and puzzles. Not every dungeon gets every
+  // feature -- a constructed castle doesn't get a natural chasm, and only water-themed dungeons
+  // get ponds -- but every dungeon gets a genuine chance at *something* beyond bare floor and
+  // monsters. All of it plugs into the same fire/gas/steam engine everything else uses. ----
+  placeTraps(grid, floors, rng, up, down, meta, depth);
+  if (meta.hazard === 'poison') {
     for (let i = 0; i < 4; i++) {
       const c = choice(rng, floors);
       const t = grid[c.y][c.x];
       if (t.walkable) { t.feature = 'poisongas'; t.glyph = '"'; t.color = '#5ac95a'; }
     }
-  } else if (meta.hazard === 'water') {
-    for (let i = 0; i < 6; i++) {
-      const c = choice(rng, floors);
-      const t = grid[c.y][c.x];
-      if (t.walkable && !(c.x===up.x&&c.y===up.y) && !(c.x===down.x&&c.y===down.y)) { t.walkable = false; t.feature = 'water'; t.glyph = '~'; t.color = '#2a4a6a'; }
-    }
   }
+  if (meta.hazard === 'water') { placeWaterFeature(grid, floors, rng, up, down); if (rng() < 0.35) placeWaterFeature(grid, floors, rng, up, down); }
+  if (meta.genre === 'cave' && rng() < 0.55) placeChasmFeature(grid, floors, rng, up, down);
+  if (rng() < 0.4) placeLockedVault(grid, floors, level, rng, up, down, meta);
+  if (meta.genre === 'rooms' && rooms.length >= 3 && rng() < 0.3) placeLeverPuzzle(grid, rooms, level, rng, up, down, meta);
+  if (meta.genre === 'rooms' && rng() < 0.35) placeStatues(grid, floors, rng, up, down, meta);
   return level;
 
   function dtile2(glyph, walkable, color) {
     return { glyph, walkable, color: color || (walkable ? '#5a5248' : '#3a352c'), bg: walkable ? '#161310' : '#0c0a08', feature: walkable?'floor':'wall' };
+  }
+  function occupiedInLevel(lv, x, y) {
+    return lv.monsters.some(m => m.x===x && m.y===y) || lv.items.some(it => it.x===x && it.y===y);
+  }
+  // ---- typed traps: every dungeon gets a small baseline chance of something nasty, trap-themed
+  // dungeons get a heavy, varied spread. Darts and spikes are single-tile; fire, gas, and alarm
+  // traps affect an area or the whole level, same as the equivalent spells/grenades. ----
+  function placeTraps(g, floors, rng, up, down, meta, depth) {
+    const heavy = meta.hazard === 'traps';
+    const count = heavy ? 4 + Math.floor(depth/2) : (rng() < 0.65 ? 1 + Math.floor(depth/5) : 0);
+    const pool = heavy ? ['dart','spike','fire','gas','alarm','floorbreak','spike','fire','gas']
+                        : ['dart','spike','gas','alarm'];
+    for (let i = 0; i < count; i++) {
+      const c = choice(rng, floors);
+      if ((c.x===up.x&&c.y===up.y)||(c.x===down.x&&c.y===down.y)) continue;
+      const t = g[c.y][c.x];
+      if (!t.walkable || t.hiddenTrap || t.feature !== 'floor') continue;
+      t.hiddenTrap = true;
+      t.trapType = choice(rng, pool);
+    }
+  }
+  // ---- water features: several distinct shapes so hazard dungeons don't all get the same
+  // single round puddle. Ponds are the common baseline; rivers and lakes are rarer and more
+  // dramatic. Every variant guarantees at least one crossing so it's a hazard to route around,
+  // never a dead end -- and if a fancier shape can't find room to fit, we fall back to a pond. ----
+  function placeWaterFeature(g, floors, rng, up, down) {
+    const type = weightedChoice(rng, [['pond', 55], ['river', 28], ['lake', 17]]);
+    let ok = false;
+    if (type === 'river') ok = placeRiver(g, floors, rng, up, down);
+    else if (type === 'lake') ok = placeLake(g, floors, rng, up, down);
+    if (!ok) ok = placePond(g, floors, rng, up, down);
+    return ok;
+  }
+  function placePond(g, floors, rng, up, down) {
+    const center = choice(rng, floors);
+    if (chebyshev(center.x,center.y,up.x,up.y) < 4 || chebyshev(center.x,center.y,down.x,down.y) < 3) return false;
+    const spread = 2 + rng()*1.5;
+    const cells = [];
+    for (let dy=-3; dy<=3; dy++) for (let dx=-3; dx<=3; dx++) {
+      if (dx*dx+dy*dy > spread*spread) continue;
+      const x=center.x+dx, y=center.y+dy;
+      if (x<2||y<2||x>=DW2-2||y>=DH2-2) continue;
+      const t = g[y][x];
+      if (t.walkable && t.feature==='floor' && !occupiedInLevel(level, x, y) && !(x===up.x&&y===up.y) && !(x===down.x&&y===down.y)) cells.push({x,y});
+    }
+    if (cells.length < 4) return false;
+    cells.forEach(c => setTileWater(g[c.y][c.x]));
+    for (let x = center.x-3; x <= center.x+3; x++) {
+      const t = g[center.y] && g[center.y][x];
+      if (t && t.feature === 'water') { t.walkable = true; t.feature = 'woodbridge'; t.bridgeOver = 'water'; t.glyph = '='; t.color = '#a07840'; t.bg = '#1a140a'; }
+    }
+    return true;
+  }
+  // ---- a meandering river running the length of the level, only forming where it crosses
+  // open floor (never punched through walls) so it can appear as one continuous ribbon in a
+  // cave or as broken pools linking several rooms. Several bridges keep it from being an
+  // impassable wall down the middle of the map. ----
+  function placeRiver(g, floors, rng, up, down) {
+    const horiz = rng() < 0.5;
+    const amplitude = 3 + rng()*4;
+    const wavelen = 9 + rng()*9;
+    const phase = rng()*Math.PI*2;
+    const wide = rng() < 0.3;
+    const baseline = 5 + rng()*((horiz?DH2:DW2)-10);
+    const length = horiz ? DW2 : DH2;
+    const cells = [];
+    for (let i = 2; i < length-2; i++) {
+      const center = Math.round(baseline + Math.sin(i/wavelen*Math.PI*2 + phase) * amplitude);
+      const spanEnd = wide ? 1 : 0;
+      for (let th = 0; th <= spanEnd; th++) {
+        const x = horiz ? i : center+th;
+        const y = horiz ? center+th : i;
+        if (x<2||y<2||x>=DW2-2||y>=DH2-2) continue;
+        const t = g[y][x];
+        if (t.walkable && t.feature==='floor' && !occupiedInLevel(level, x, y) && !(x===up.x&&y===up.y) && !(x===down.x&&y===down.y)) cells.push({x,y});
+      }
+    }
+    if (cells.length < 10) return false;
+    cells.forEach(c => setTileWater(g[c.y][c.x]));
+    const bridgeCount = 2 + Math.floor(rng()*2);
+    for (let b = 0; b < bridgeCount; b++) {
+      const idx = Math.floor((b+0.5) * cells.length / bridgeCount);
+      const c = cells[idx];
+      if (!c) continue;
+      const t = g[c.y][c.x];
+      if (t.feature === 'water') { t.walkable = true; t.feature = 'woodbridge'; t.bridgeOver = 'water'; t.glyph = '='; t.color = '#a07840'; t.bg = '#1a140a'; }
+      if (wide) {
+        const nx = horiz ? c.x : c.x+1, ny = horiz ? c.y+1 : c.y;
+        const t2 = g[ny] && g[ny][nx];
+        if (t2 && t2.feature === 'water') { t2.walkable = true; t2.feature = 'woodbridge'; t2.bridgeOver = 'water'; t2.glyph = '='; t2.color = '#a07840'; t2.bg = '#1a140a'; }
+      }
+    }
+    return true;
+  }
+  // ---- a sprawling lake that can span a large stretch of the level, big enough that it needs
+  // several separate crossings rather than one bridge. Rare -- meant to feel like a real
+  // set-piece body of water, not just a bigger puddle. ----
+  function placeLake(g, floors, rng, up, down) {
+    const center = choice(rng, floors);
+    if (chebyshev(center.x,center.y,up.x,up.y) < 6 || chebyshev(center.x,center.y,down.x,down.y) < 5) return false;
+    const spreadX = 6 + rng()*5, spreadY = 5 + rng()*4;
+    const cells = [];
+    for (let dy=-Math.ceil(spreadY); dy<=Math.ceil(spreadY); dy++) for (let dx=-Math.ceil(spreadX); dx<=Math.ceil(spreadX); dx++) {
+      if ((dx*dx)/(spreadX*spreadX) + (dy*dy)/(spreadY*spreadY) > 1) continue;
+      const x=center.x+dx, y=center.y+dy;
+      if (x<2||y<2||x>=DW2-2||y>=DH2-2) continue;
+      const t = g[y][x];
+      if (t.walkable && t.feature==='floor' && !occupiedInLevel(level, x, y) && !(x===up.x&&y===up.y) && !(x===down.x&&y===down.y)) cells.push({x,y});
+    }
+    if (cells.length < 12) return false;
+    cells.forEach(c => setTileWater(g[c.y][c.x]));
+    bridgeLakeOrCavern(g, rng, center, spreadX, spreadY, 'water');
+    return true;
+  }
+  // shared helper: lay one or two straight bridge lines through a big blob feature (lake or
+  // chasm cavern) so a sprawling hazard always has more than one crossing point.
+  function bridgeLakeOrCavern(g, rng, center, spreadX, spreadY, kind) {
+    const lines = 2 + (rng() < 0.5 ? 1 : 0);
+    for (let i=0;i<lines;i++) {
+      const useRow = i % 2 === 0;
+      if (useRow) {
+        const y = center.y + Math.round((rng()-0.5) * spreadY * 0.6);
+        for (let x = center.x - Math.ceil(spreadX)-1; x <= center.x + Math.ceil(spreadX)+1; x++) {
+          const t = g[y] && g[y][x];
+          if (t && t.feature === kind) { t.walkable = true; t.feature = 'woodbridge'; t.bridgeOver = kind; t.glyph = '='; t.color = '#a07840'; t.bg = '#1a140a'; }
+        }
+      } else {
+        const x = center.x + Math.round((rng()-0.5) * spreadX * 0.6);
+        for (let y = center.y - Math.ceil(spreadY)-1; y <= center.y + Math.ceil(spreadY)+1; y++) {
+          const t = g[y] && g[y][x];
+          if (t && t.feature === kind) { t.walkable = true; t.feature = 'woodbridge'; t.bridgeOver = kind; t.glyph = '='; t.color = '#a07840'; t.bg = '#1a140a'; }
+        }
+      }
+    }
+  }
+  // ---- chasm features: a straight crack is the common case; caverns and branching rifts are
+  // rarer, bigger set pieces. All three guarantee a crossing. ----
+  function placeChasmFeature(g, floors, rng, up, down) {
+    const type = weightedChoice(rng, [['crack', 55], ['cavern', 24], ['branching', 21]]);
+    let ok = false;
+    if (type === 'cavern') ok = placeChasmCavern(g, floors, rng, up, down);
+    else if (type === 'branching') ok = placeChasmBranching(g, floors, rng, up, down);
+    if (!ok) ok = placeChasm(g, floors, rng, up, down);
+    return ok;
+  }
+  // ---- a chasm slicing across a cave, with exactly one wooden bridge as the crossing point --
+  // burn the bridge down (deliberately or by accident) and that route is gone for good. ----
+  function placeChasm(g, floors, rng, up, down) {
+    const center = choice(rng, floors);
+    if (chebyshev(center.x,center.y,up.x,up.y) < 5 || chebyshev(center.x,center.y,down.x,down.y) < 4) return false;
+    const horiz = rng() < 0.5;
+    const cells = [];
+    for (let i=-3;i<=3;i++) {
+      const x = horiz ? center.x : center.x+i;
+      const y = horiz ? center.y+i : center.y;
+      if (x<2||y<2||x>=DW2-2||y>=DH2-2) continue;
+      const t = g[y][x];
+      if (t.walkable && t.feature==='floor' && !occupiedInLevel(level, x, y) && !(x===up.x&&y===up.y) && !(x===down.x&&y===down.y)) cells.push({x,y});
+    }
+    if (cells.length < 4) return false;
+    cells.forEach(c => setTileChasm(g[c.y][c.x]));
+    const mid = cells[Math.floor(cells.length/2)];
+    const bt = g[mid.y][mid.x];
+    bt.walkable = true; bt.feature = 'woodbridge'; bt.bridgeOver = 'chasm'; bt.glyph = '='; bt.color = '#a07840'; bt.bg = '#1a140a';
+    return true;
+  }
+  // ---- a wide chasm chamber -- a real gulf splitting the room, not just a crack. Rare, and
+  // needs two separate crossings since one bridge would feel stingy across something this big. ----
+  function placeChasmCavern(g, floors, rng, up, down) {
+    const center = choice(rng, floors);
+    if (chebyshev(center.x,center.y,up.x,up.y) < 6 || chebyshev(center.x,center.y,down.x,down.y) < 5) return false;
+    const spreadX = 5 + rng()*4, spreadY = 4 + rng()*3;
+    const cells = [];
+    for (let dy=-Math.ceil(spreadY); dy<=Math.ceil(spreadY); dy++) for (let dx=-Math.ceil(spreadX); dx<=Math.ceil(spreadX); dx++) {
+      if ((dx*dx)/(spreadX*spreadX) + (dy*dy)/(spreadY*spreadY) > 1) continue;
+      const x=center.x+dx, y=center.y+dy;
+      if (x<2||y<2||x>=DW2-2||y>=DH2-2) continue;
+      const t = g[y][x];
+      if (t.walkable && t.feature==='floor' && !occupiedInLevel(level, x, y) && !(x===up.x&&y===up.y) && !(x===down.x&&y===down.y)) cells.push({x,y});
+    }
+    if (cells.length < 10) return false;
+    cells.forEach(c => setTileChasm(g[c.y][c.x]));
+    bridgeLakeOrCavern(g, rng, center, spreadX, spreadY, 'chasm');
+    return true;
+  }
+  // ---- a chasm that forks into two or three rifts from a shared point, rather than one clean
+  // line. Rarest and most disorienting -- only the shared junction is bridged, so committing to
+  // the wrong arm means backtracking. ----
+  function placeChasmBranching(g, floors, rng, up, down) {
+    const center = choice(rng, floors);
+    if (chebyshev(center.x,center.y,up.x,up.y) < 6 || chebyshev(center.x,center.y,down.x,down.y) < 5) return false;
+    const armCount = 2 + (rng() < 0.5 ? 1 : 0);
+    const dirPool = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+    const usedDirs = [];
+    const allCells = [];
+    for (let a = 0; a < armCount; a++) {
+      let dir, tries = 0;
+      do { dir = choice(rng, dirPool); tries++; }
+      while (tries < 20 && usedDirs.some(d => d[0]===dir[0] && d[1]===dir[1]));
+      usedDirs.push(dir);
+      const len = 3 + Math.floor(rng()*3);
+      for (let i=0;i<=len;i++) {
+        const x = center.x + dir[0]*i, y = center.y + dir[1]*i;
+        if (x<2||y<2||x>=DW2-2||y>=DH2-2) continue;
+        const t = g[y][x];
+        if (t.walkable && t.feature==='floor' && !occupiedInLevel(level, x, y) && !(x===up.x&&y===up.y) && !(x===down.x&&y===down.y)) allCells.push({x,y});
+      }
+    }
+    if (allCells.length < 6) return false;
+    allCells.forEach(c => setTileChasm(g[c.y][c.x]));
+    const centerTile = g[center.y] && g[center.y][center.x];
+    if (centerTile && centerTile.feature === 'chasm') {
+      centerTile.walkable = true; centerTile.feature = 'woodbridge'; centerTile.bridgeOver = 'chasm'; centerTile.glyph = '='; centerTile.color = '#a07840'; centerTile.bg = '#1a140a';
+    } else {
+      const c = allCells[0];
+      const t = g[c.y][c.x];
+      t.walkable = true; t.feature = 'woodbridge'; t.bridgeOver = 'chasm'; t.glyph = '='; t.color = '#a07840'; t.bg = '#1a140a';
+    }
+    return true;
+  }
+  // ---- a genuine locked treasure vault: a small side room carved fresh behind a locked door,
+  // with the matching key placed elsewhere on the level (sometimes on a guarding monster). ----
+  function placeLockedVault(g, floors, level, rng, up, down, meta) {
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const c = choice(rng, floors);
+      if (!g[c.y] || !g[c.y][c.x] || !g[c.y][c.x].walkable) continue;
+      if (chebyshev(c.x,c.y,up.x,up.y) < 5 || chebyshev(c.x,c.y,down.x,down.y) < 4) continue;
+      const [ddx,ddy] = choice(rng, [[1,0],[-1,0],[0,1],[0,-1]]);
+      const doorX = c.x+ddx, doorY = c.y+ddy, vx = doorX+ddx, vy = doorY+ddy;
+      if (doorX<3||doorY<3||doorX>=DW2-3||doorY>=DH2-3) continue;
+      if (!g[doorY] || !g[doorY][doorX] || g[doorY][doorX].walkable) continue; // needs solid wall for the door
+      const cells = [];
+      let ok = true;
+      for (let oy=-1; oy<=1; oy++) for (let ox=-1; ox<=1; ox++) {
+        const x=vx+ox, y=vy+oy;
+        if (x<2||y<2||x>=DW2-2||y>=DH2-2) { ok=false; break; }
+        if ((x===up.x&&y===up.y)||(x===down.x&&y===down.y)) { ok=false; break; }
+        cells.push({x,y});
+      }
+      if (!ok) continue;
+      cells.forEach(p => { g[p.y][p.x] = dtile2('.', true); });
+      const token = 'vk' + Math.floor(rng()*1e9);
+      g[doorY][doorX] = { glyph:'+', color:'#8a6a3a', bg:'#1a140a', walkable:false, feature:'lockeddoor', vaultToken: token };
+      const rarity = Math.max(1, Math.min(4, Math.round(Math.floor((level.depth||1)/2) * 1.3) + 1));
+      const chestBase = ITEM_BASES.find(b=>b.id==='chest');
+      const chestItem = Object.assign({}, chestBase, { uid:'i'+Math.random().toString(36).slice(2,9), tier: rarity, lootBias: meta.lootBias });
+      level.items.push({ x: vx, y: vy, item: chestItem });
+      const key = { uid:'i'+Math.random().toString(36).slice(2,9), id:'vault_key', type:'key', name:'Tarnished Vault Key', glyph:'k', color:'#e8c34a', value:0, vaultToken: token };
+      if (level.monsters.length && rng() < 0.6) {
+        const guard = choice(rng, level.monsters);
+        guard.guaranteedDrops = (guard.guaranteedDrops || []).concat([key]);
+      } else {
+        const kc = choice(rng, floors.filter(f => chebyshev(f.x,f.y,vx,vy) > 4));
+        if (kc) level.items.push({ x: kc.x, y: kc.y, item: key });
+        else level.items.push({ x: c.x, y: c.y, item: key });
+      }
+      return;
+    }
+  }
+  // ---- a lever puzzle: several levers, only one genuine. Pull the right one and a nearby vault
+  // (or, lacking one, a reinforced dead-end wall) opens; pull a decoy and pay for it. ----
+  function placeLeverPuzzle(g, rooms, level, rng, up, down, meta) {
+    const candidates = rooms.filter(r => r.w >= 5 && r.h >= 5 && chebyshev(r.cx,r.cy,up.x,up.y) > 4);
+    if (!candidates.length) return;
+    const room = choice(rng, candidates);
+    const spots = [];
+    for (let x = room.x+1; x < room.x+room.w-1; x++) { spots.push({x, y: room.y+1}); }
+    if (spots.length < 3) return;
+    const leverCount = Math.min(spots.length, 3 + (rng()<0.4?1:0));
+    const chosen = [];
+    while (chosen.length < leverCount && spots.length) { chosen.push(spots.splice(Math.floor(rng()*spots.length),1)[0]); }
+    const correctIdx = Math.floor(rng()*chosen.length);
+    const puzzleId = 'lp' + Math.floor(rng()*1e9);
+    const flavor = meta.lootBias === 'cyber' ? 'control switch' : (meta.lootBias === 'eldritch' ? 'rune-etched lever' : 'iron lever');
+    chosen.forEach((spot, i) => {
+      const t = g[spot.y][spot.x];
+      if (!t || !t.walkable) return;
+      t.feature = 'lever'; t.leverCorrect = (i === correctIdx); t.leverPulled = false; t.leverName = flavor;
+      t.puzzleId = puzzleId; t.glyph = '/'; t.color = '#9a8a6a';
+    });
+    // reward: a fresh side vault behind the room's far wall, unlocked by the correct lever
+    const doorX = Math.min(DW2-3, room.x+room.w+1), doorY = room.cy;
+    if (g[doorY] && g[doorY][doorX] && !g[doorY][doorX].walkable) {
+      const vx = doorX+1, vy = doorY;
+      const cells = [];
+      let ok = true;
+      for (let oy=-1; oy<=1; oy++) for (let ox=-1; ox<=1; ox++) {
+        const x=vx+ox, y=vy+oy;
+        if (x<2||y<2||x>=DW2-2||y>=DH2-2) { ok=false; break; }
+        cells.push({x,y});
+      }
+      if (ok) {
+        cells.forEach(p => { g[p.y][p.x] = dtile2('.', true); });
+        g[doorY][doorX] = { glyph:'+', color:'#6a7a9a', bg:'#1a140a', walkable:false, feature:'leverdoor', puzzleId };
+        const rarity = Math.max(1, Math.min(4, Math.round(Math.floor((level.depth||1)/2) * 1.3)));
+        const chestBase = ITEM_BASES.find(b=>b.id==='chest');
+        const chestItem = Object.assign({}, chestBase, { uid:'i'+Math.random().toString(36).slice(2,9), tier: rarity, lootBias: meta.lootBias });
+        level.items.push({ x: vx, y: vy, item: chestItem });
+      }
+    }
+  }
+  // ---- decorative statues that also block movement and line of sight, giving rooms cover and
+  // chokepoints to actually use tactically instead of open featureless boxes. ----
+  function placeStatues(g, floors, rng, up, down, meta) {
+    const count = 1 + Math.floor(rng()*3);
+    const names = meta.lootBias === 'cyber' ? ['inert combat frame','shattered drone husk'] :
+      (meta.lootBias === 'eldritch' ? ['weeping obsidian idol','writhing stone effigy'] : ['crumbling statue','weathered idol']);
+    for (let i = 0; i < count; i++) {
+      const c = choice(rng, floors);
+      if ((c.x===up.x&&c.y===up.y)||(c.x===down.x&&c.y===down.y)) continue;
+      const t = g[c.y][c.x];
+      if (!t.walkable || t.feature !== 'floor' || occupiedInLevel(level, c.x, c.y)) continue;
+      t.walkable = false; t.feature = 'statue'; t.glyph = '\u2660'; t.color = '#6a6a72'; t.statueName = choice(rng, names);
+    }
   }
   function genRoomsV2(labyrinth) {
     const g = [];
@@ -6715,11 +7482,11 @@ function generateDungeonLevel(theme, depth, maxDepth, variantId) {
       const ry = p.y + Math.floor((p.h - rh)/2);
       if (rx < 0 || ry < 0 || rx+rw >= DW2 || ry+rh >= DH2 || rw<3||rh<3) continue;
       for (let y = ry; y < ry+rh; y++) for (let x = rx; x < rx+rw; x++) g[y][x] = dtile2('.', true);
-      roomRects.push({ cx: Math.floor(rx+rw/2), cy: Math.floor(ry+rh/2) });
+      roomRects.push({ cx: Math.floor(rx+rw/2), cy: Math.floor(ry+rh/2), x: rx, y: ry, w: rw, h: rh });
     }
     for (let i = 1; i < roomRects.length; i++) { const a = roomRects[i-1], b = roomRects[i]; carveCorridor(g, a.cx, a.cy, b.cx, b.cy); }
     if (labyrinth) { for (let i = 0; i < roomRects.length; i++) { const a = choice(Math.random, roomRects); const b = choice(Math.random, roomRects); carveCorridor(g, a.cx, a.cy, b.cx, b.cy); } }
-    return g;
+    return { grid: g, rooms: roomRects };
   }
   function carveCorridor(g, x0, y0, x1, y1) {
     let x = x0, y = y0;
@@ -6749,7 +7516,7 @@ function generateDungeonLevel(theme, depth, maxDepth, variantId) {
     }
     const out = [];
     for (let y = 0; y < DH2; y++) { const row=[]; for (let x=0;x<DW2;x++) row.push(dtile2(g[y][x] ? '#':'.', !g[y][x])); out.push(row); }
-    return out;
+    return { grid: out, rooms: [] };
   }
 }
 function makeCyberChip(rng) {
@@ -6793,6 +7560,35 @@ function movePlayer(dx, dy) {
   const t = curTileAt(nx, ny);
   const isWaterTile = t && (t.feature === 'water' || t.biome === 'ocean');
   if (!curWalkable(nx, ny)) {
+    if (t && t.feature === 'lockeddoor') {
+      const key = player.inventory.find(i => i.type === 'key' && i.vaultToken === t.vaultToken);
+      if (key) {
+        player.inventory = player.inventory.filter(i => i.uid !== key.uid);
+        t.walkable = true; t.feature = 'floor'; t.glyph = "'"; t.color = '#8a6a3a';
+        Sound.play('door');
+        log('The vault key turns with a heavy click. The door swings open.');
+        endTurn(); return;
+      }
+      Sound.play('bump');
+      log('The door is locked tight. It needs a specific key.');
+      return;
+    }
+    if (t && t.feature === 'leverdoor') {
+      Sound.play('bump');
+      log("This heavy door won't budge — something elsewhere in the room must release it.");
+      return;
+    }
+    if (t && t.feature === 'chasm') {
+      if (curIsDungeon()) { promptChasmJump(nx, ny); return; }
+      Sound.play('bump');
+      log('A dark chasm drops away beneath you. You need another way across.');
+      return;
+    }
+    if (t && t.feature === 'statue') {
+      Sound.play('bump');
+      log(`A ${t.statueName || 'weathered statue'} blocks the way.`);
+      return;
+    }
     if (isWaterTile && !curIsDungeon()) {
       const hasRaft = player.inventory.some(i => i.id === 'raft');
       const flying = getBuff('flight') > 0;
@@ -6837,11 +7633,23 @@ function movePlayer(dx, dy) {
     if (player.trapImmune || Math.random() < (player.trapAvoidBonus || 0)) {
       log('You spot a hidden trap just in time and step around it!');
     } else {
-      const dmg = randInt(Math.random, 4, 11);
-      player.hp -= dmg;
-      Sound.play('trap');
-      log(`A hidden trap triggers! You take ${dmg} damage.`);
-      if (player.hp <= 0) { onDeath(player, null); return; }
+      triggerTrapAt(t, nx, ny);
+      if (!player.alive || player.hp <= 0) return;
+    }
+  }
+  if (curIsDungeon() && t.feature === 'lever' && !t.leverPulled) {
+    t.leverPulled = true;
+    if (t.leverCorrect) {
+      log(`You pull the ${t.leverName || 'lever'}. Somewhere nearby, a heavy mechanism grinds open.`);
+      for (let yy = 0; yy < DH2; yy++) for (let xx = 0; xx < DW2; xx++) {
+        const dt = curTileAt(xx, yy);
+        if (dt && dt.feature === 'leverdoor' && dt.puzzleId === t.puzzleId) { dt.walkable = true; dt.feature = 'floor'; dt.glyph = "'"; dt.color = '#8a6a3a'; }
+      }
+      Sound.play('door');
+    } else {
+      log(`You pull the ${t.leverName || 'lever'}. Wrong choice — something goes off!`);
+      if (Math.random() < 0.5) { igniteArea(nx, ny, 2); log('Hidden vents spray flame across the room!'); }
+      else { for (const m of curMonsters()) { if (m.alive && chebyshev(m.x,m.y,nx,ny) <= 20 && Math.random() < 0.6) m.engaged = true; } log('An alarm rings through the dungeon!'); }
     }
   }
   if (curIsDungeon() && t.feature === 'poisongas') {
@@ -6869,6 +7677,7 @@ function movePlayer(dx, dy) {
 // ---- turn processing v6: Charge regeneration ----
 function endTurn() {
   turnCount++;
+  if (activeDecoys.length) { for (const d of activeDecoys) d.turns--; activeDecoys = activeDecoys.filter(d => d.turns > 0); }
   for (const stat in player.buffs) {
     const b = player.buffs[stat];
     if (stat === 'regen') player.hp = Math.min(player.maxHp, player.hp + b.power);
@@ -7002,6 +7811,95 @@ function maybeGrantCookingBonusEffect(it) {
 }
 
 // ---- useItem v7: adds cyberware chips (learn cybernetic) and mutagen vials (grant mutation) ----
+// ---- thrown items: land wherever you actually aim them, not at your own feet ----
+function beginThrowTargeting(it) {
+  const range = 6 + (player.throwRangeBonus || 0);
+  beginTileTargeting('throw', { item: it, range, aoeRadius: it.radius || 0 });
+  log(`Throw ${it.name} (range ${range}) — click a tile, or press Enter/Space to snap to the nearest foe. Esc to cancel.`);
+}
+function resolveThrowAtTile(it, wx, wy) {
+  const dmgMult = 1 + (player.alchemyPotencyBonus||0) + (player.throwDmgBonus||0);
+  const radius = (it.radius||3) + (player.throwRadiusBonus||0);
+  player.inventory = player.inventory.filter(i => i.uid !== it.uid);
+  Sound.play('drink');
+  switch (it.effect) {
+    case 'aoefire': {
+      const hit = hostilesWithinRadius(wx, wy, radius);
+      hit.forEach(t => { const dmg = Math.round(randInt(Math.random, it.power[0], it.power[1]) * dmgMult); t.hp -= dmg; log(`The blast engulfs ${t.name} for ${dmg} fire damage.`); if (t.hp<=0) onDeath(t, player); });
+      const d = scorchArea(wx, wy, radius+1); if (d>0) log(`The flames spread, destroying ${d} trees!`);
+      igniteArea(wx, wy, radius);
+      log(`${it.name} bursts into flame where it lands.`);
+      break;
+    }
+    case 'aoefrost': {
+      const hit = hostilesWithinRadius(wx, wy, radius);
+      hit.forEach(t => { const dmg = Math.round(randInt(Math.random, it.power[0], it.power[1]) * dmgMult); t.hp -= dmg; log(`Freezing shrapnel tears into ${t.name} for ${dmg} frost damage.`); if (t.hp<=0) onDeath(t, player); });
+      break;
+    }
+    case 'aoepoison': {
+      gasArea(wx, wy, 6, it.power, 'poison');
+      log(`${it.name} shatters and releases a spreading cloud of choking gas.`);
+      break;
+    }
+    case 'aoeconfuse': {
+      gasArea(wx, wy, 5, it.power||3, 'confuse');
+      log(`${it.name} shatters in a flash, and disorienting fumes spread outward.`);
+      break;
+    }
+    case 'throwdmg': {
+      const t = entityAt(wx, wy);
+      if (t && t.alive !== false) { const dmg = randInt(Math.random, it.power[0], it.power[1]); t.hp -= dmg; log(`You hit ${t.name} for ${dmg}.`); if (t.hp<=0) onDeath(t, player); }
+      else log(`${it.name} lands, striking nothing.`);
+      break;
+    }
+    case 'scrollfire': {
+      const t = entityAt(wx, wy);
+      if (t && t.alive !== false) { const dmg = randInt(Math.random, it.power, it.power+8); t.hp -= dmg; log(`The scroll erupts! ${t.name} takes ${dmg} fire damage.`); if (t.hp<=0) onDeath(t, player); }
+      igniteTile(wx, wy, 4);
+      break;
+    }
+    case 'throwaoe': {
+      const hit = hostilesWithinRadius(wx, wy, radius);
+      hit.forEach(h => { const dmg = Math.round(randInt(Math.random, it.power[0], it.power[1]) * dmgMult); h.hp -= dmg; log(`The blast tears into ${h.name} for ${dmg} damage.`); if (h.hp<=0) onDeath(h, player); });
+      log(hit.length ? `${it.name} detonates!` : `${it.name} detonates, but nothing was close enough to catch the blast.`);
+      break;
+    }
+    case 'throwgas': {
+      gasArea(wx, wy, 6, it.power || 4, 'poison');
+      log('A billowing cloud of gas settles over the area.');
+      break;
+    }
+    case 'throwemp': {
+      const hit = hostilesWithinRadius(wx, wy, radius);
+      hit.forEach(h => { h.statusConfuse = (h.statusConfuse||0) + 3; log(`${h.name}'s systems scramble in the EMP burst!`); });
+      break;
+    }
+    case 'throwslow': case 'throwsnare': {
+      const hit = hostilesWithinRadius(wx, wy, radius);
+      hit.forEach(h => { h.statusSlow = (h.statusSlow||0) + 4; log(`${h.name} is caught and slowed!`); });
+      break;
+    }
+  }
+  updateSidebar();
+}
+// A weapon held into an open flame catches fire itself for a few swings -- real, temporary
+// bonus fire damage on your next several attacks, with a chance to ignite whatever you hit
+// (or the ground beneath a miss). Consistent with the same fire/flammable rules as everything
+// else: no fire tile nearby, nothing to dip into.
+function adjacentFireTile() {
+  for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++) {
+    const t = curTileAt(player.x+dx, player.y+dy);
+    if (t && t.fireTurns > 0) return true;
+  }
+  return false;
+}
+function dipWeaponInFire() {
+  if (!player.equipment.hand) { log("You have nothing equipped to burn."); return; }
+  if (!adjacentFireTile()) { log('There is no fire nearby to dip your weapon into.'); return; }
+  player.buffs['weaponfire'] = { power: randInt(Math.random, 3, 6), turns: 5 };
+  log(`You thrust ${player.equipment.hand.name} into the flames — it catches fire!`);
+  endTurn();
+}
 function useItem(it) {
   if (it.type === 'chest') { openChest(it); return; }
   if (it.type === 'cyberchip') {
@@ -7227,6 +8125,8 @@ function describeItem(it) {
   } else if (it.type === 'mutagen') {
     const m = MUTATIONS.find(x => x.id === it.mutationId);
     lines.push(`A vial of unstable eldritch mutagen. Drinking it grants the mutation ${m ? m.name : '???'} and raises your Corruption.`);
+  } else if (it.type === 'key') {
+    lines.push('A vault key. Carry it to the matching locked door and walk into the door to unlock it — consumed on use.');
   } else if (it.type === 'misc') {
     if (it.id === 'gold') lines.push('Currency.');
     else if (it.id === 'compass') lines.push('While carried, shows the direction to the nearest known dungeon in your status panel.');
@@ -7344,7 +8244,7 @@ function deleteSaveGame() {
 }
 function applyLoadedSave(data) {
   if (!data || !data.player) { log('That save file looks corrupted.'); return; }
-  worldChunks.clear(); dungeonRegistry.clear(); kingdomRegistry.clear();
+  clearWorldRegistries();
   SEED = data.seed;
   turnCount = data.turnCount || 0;
   zoomIndex = (data.zoomIndex !== undefined) ? data.zoomIndex : 5;
@@ -7669,8 +8569,23 @@ function showArchetypePicker() {
   html += `<div class="modal-opt" onclick="simulateKey('<')" style="margin-top:6px">[&lt;] Back to Main Menu</div>`;
   renderModal('Choose Your Path', html, 'Letter/click to choose, &lt; to go back.');
 }
+// A genuinely new game needs a genuinely fresh world -- otherwise every chunk the previous
+// character ever explored (monsters they killed, loot they took, NPCs they befriended or
+// angered, chests they opened) would silently carry over into the "new" character's world,
+// and any dungeon they'd already cleared would still be cleared. Shared with the load-game
+// path, which needs the same clearing but keeps its own saved SEED/turnCount afterward.
+function clearWorldRegistries() {
+  worldChunks.clear(); dungeonRegistry.clear(); kingdomRegistry.clear();
+  activeFxTiles = []; activeDecoys = [];
+}
+function resetWorldState() {
+  clearWorldRegistries();
+  SEED = Math.floor(Math.random() * 1e9);
+  turnCount = 0;
+}
 function archetypeChoice(letter) {
   if (letter === '<') { showTitleScreen(); return; }
+  resetWorldState();
   if (letter === 'a') { player = newPlayer(); creationDraft = { points: CREATION_POINTS, statAdds:{str:0,dex:0,int:0,con:0,wis:0}, abilities:[], abilityCat:'spells', gold:0, items:[] }; showCreateStats(); return; }
   if (letter === 'b') { player = newPlayer(); const arch = choice(Math.random, ARCHETYPES); arch.apply(); player.scenario = 'archetype:' + arch.id; log(`*** Random roll: you are a ${arch.name}! ***`); showStartScreen(); return; }
   const idx = letter.charCodeAt(0) - 97 - 2;
@@ -7868,13 +8783,13 @@ function initGame() {
   if (canvas.addEventListener) {
     canvas.addEventListener('click', (evt) => {
       Sound.unlock();
-      if (gameState !== 'playing' && gameState !== 'blinktarget') return;
+      if (gameState !== 'playing' && gameState !== 'tiletarget') return;
       const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left:0, top:0 };
       const vv = curView();
       const px = evt.clientX - rect.left, py = evt.clientY - rect.top;
       const sx = Math.floor(px / vv.ts), sy = Math.floor(py / vv.ts);
       const wx = player.x + sx - vv.halfW, wy = player.y + sy - vv.halfH;
-      if (gameState === 'blinktarget') { confirmBlinkTarget(wx, wy); return; }
+      if (gameState === 'tiletarget') { confirmTileTarget(wx, wy); return; }
       lookAtWorldPos(wx, wy);
     });
     canvas.addEventListener('wheel', (evt) => {
@@ -8002,8 +8917,13 @@ const GUIDE_SECTIONS = [
     <div class="modal-opt">Melee: walk into a hostile. Ranged weapons: equip in Hand, press <b>f</b> to fire at range.</div>
     <div class="modal-opt">Hit chance scales with relative DEX; damage = weapon/technique dice + STR bonus − target Armor,
     with a critical chance that doubles damage.</div>
-    <div class="modal-opt">Single-target abilities auto-fire when only one enemy is in range, or open a target picker
-    when several are. AOE abilities strike everyone within a radius automatically.</div>
+    <div class="modal-opt">Offensive and debuff spells/techniques/cybernetics/mutations now open <b>free-aim targeting</b>
+    instead of auto-locking onto whatever's nearest: click any tile you can see and reach, not just an enemy. Empty
+    ground, a tree, water, an ally, or yourself are all valid — a fireball you drop short of a monster still ignites
+    the grass it lands on, and a gas grenade thrown into a doorway still fills the room even if nothing's standing
+    there yet. Press <b>Enter</b>/<b>Space</b> instead of clicking to auto-aim at the nearest hostile, for when you
+    just want the quick option. <b>Esc</b> cancels with no cost spent. AOE spells preview their blast radius and hit
+    everyone caught in it — including you and your allies if you're careless about where you stand.</div>
     <div class="modal-opt">Some powerful abilities (dragon breath, certain fire spells/cybernetics/mutations) can scorch
     trees and cacti in the overworld, permanently clearing the land around the blast.</div>
     <div class="modal-opt" style="margin-top:6px"><b>Enemy AI:</b> not every monster fights the same way. Chargers (dragons,
@@ -8017,13 +8937,42 @@ const GUIDE_SECTIONS = [
     Caltrops and Net Traps apply a real Slow (a chance to skip their turn while it lasts), not just flavor text.</div>
     <div class="modal-opt" style="margin-top:6px"><b>Terrain physics:</b> fire spells, dragon breath, firebombs, and fire-touched
     monster attacks genuinely ignite the ground — flames spread to nearby flammable terrain (forest, plains, doors), burn
-    anyone standing on them each turn, and leave lingering smoke that blocks line of sight. Fire hitting water fizzles into
-    a burst of steam instead of burning. Gas spells and grenades (Caustic Gas, Poison Cloud, Poison Gas Grenade, gas-cloud
-    monsters) now leave a real lingering cloud on the ground that affects anyone who walks through it later — not just
-    whoever was standing there the moment it was cast.</div>
+    anyone standing on them each turn, and leave lingering smoke that blocks line of sight. Fire hitting water doesn't just
+    fizzle — it flashes into a burst of scalding <b>steam</b> that damages anyone standing in the water and leaves a brief
+    fog behind. Gas spells and grenades (Caustic Gas, Poison Cloud, Poison Gas Grenade, gas-cloud monsters) leave a real
+    lingering cloud that <b>spreads outward turn by turn</b> while it's fresh, thins out as it ages, and affects anyone —
+    ally, enemy, or you — who walks through it, not just whoever was standing there the moment it was cast.</div>
+    <div class="modal-opt"><b>Burning weapons:</b> stand next to any fire (a burning tile, not just a spell mid-cast) and
+    choose <b>Dip in fire</b> from your equipped weapon's item menu to set it alight for several swings — bonus fire
+    damage per hit and a chance to ignite the ground under whatever you strike. It burns out on its own; walk back to a
+    flame to relight it.</div>
     <div class="modal-opt">Teleport/blink abilities (Blink, Phantom Step, Time Skip, Vestigial Wings, Warp Step, Blink Drive,
-    Grapple Hook, etc.) now let <b>you</b> choose the destination — click a highlighted tile within range on the map,
+    Grapple Hook, etc.) use the same free-aim targeting — click a highlighted tile within range on the map,
     Esc to cancel with no cost spent. They no longer just drop you somewhere random.</div>
+    <div class="modal-opt" style="margin-top:6px"><b>Every blink-family ability now does something different</b> beyond
+    plain movement — they used to all be functionally identical. Plain Blink is the unmodified baseline. Phantom Step
+    leaves a lingering double that can pull nearby monsters into attacking empty air. Time Skip quickens your reflexes
+    for a few turns after landing. Shadow Step guarantees your next strike lands true. Ride the Lightning genuinely
+    damages everything in the straight line you cross. Grapple Hook Launcher isn't a free teleport at all — it reels
+    you along a line and stops at the last open ground before a wall, or right next to the first monster in the way,
+    a real gap-closer rather than a blink. Spring-Loaded Heels is the one ability that safely no-sells a hidden trap
+    on landing — every other teleport now genuinely can land you on one. Quantum Blink Array, Vestigial Wings, Stellar
+    Drift, and Warp Step fold space around obstacles, ignoring line-of-sight entirely. Astral Projection reveals the
+    area around your destination before you arrive. Temporal Rift leaves lingering slow behind at your old position.
+    Phase-Shift Boots and Flickering Form leave you briefly impossible to pin down after landing. Blink Drive is an
+    unstable prototype with a real chance to misfire.</div>
+    <div class="modal-opt" style="margin-top:6px"><b>Elemental and physics tags now carry real mechanics</b> across
+    spells, techniques, cybernetics, and mutations alike, not just fire: frost damage (Frostbolt, Ice Spear, Glacial
+    Burst, Absolute Zero, The Long Winter, Glacial Form, Frostbite Touch) freezes water and even chasms into crossable
+    ice for a few turns, snuffs out fire, and freezes gas clouds solid. Lightning damage (Chain Lightning, Thunderstrike,
+    Lightning Javelin, Spark Fingers, Spark Gun, Static Blade, Neural Overload Discharge) genuinely arcs from the
+    struck target to the next-nearest foe, and the next, at falling damage. Wind/force damage (Gale Wind, Thunderclap,
+    Tornado, Hurricane Force, Eye of the Storm, Telekinetic Shove) physically knocks hit enemies back — into a wall,
+    or off the edge of a chasm if you're positioned right. Void/gravity effects (Gravity Well, Black Hole Singularity,
+    Star Collapse, Singularity Grenade Launcher) do the reverse, dragging everything nearby toward the center. Railgun
+    Arm punches clean through every enemy standing in a straight line instead of stopping at the first. Earthquake can
+    topple statues into rubble and shake wooden bridges apart. Plague-themed mutations (Plague Breath, Contagion Burst,
+    Spore Cloud) now leave a real spreading, lingering cloud instead of an instant one-time tick.</div>
     <div class="modal-opt">Click any visible enemy (or yourself) to inspect them — this now shows active status effects
     (poisoned, afraid, confused, slowed, berserk, burrowed, and any buffs) alongside HP and description.</div>` },
   { id:'statuseffects', label:'Status Effects', html: () => `
@@ -8069,17 +9018,20 @@ const GUIDE_SECTIONS = [
     <div class="modal-opt">${ITEM_BASES.filter(b=>b.type==='consumable').length} consumables (potions, elixirs, bandages,
     throwables, and grenades) and ${ITEM_BASES.filter(b=>b.type==='scroll').length} scrolls, covering healing/mana,
     every stat buff, elemental resistances, invisibility, curse removal, area reveal, and thrown grenades (fire, frost,
-    poison gas, EMP, caltrops/snares, mines) that land wherever the nearest enemy is standing rather than just around
-    you. ${ITEM_BASES.filter(b=>b.type==='material').length} crafting materials feed the Crafting screen (K).</div>
+    poison gas, EMP, caltrops/snares, mines). Anything throwable shows a <b>Throw</b> option in its item menu that opens
+    free-aim targeting — pick exactly the tile it lands on — alongside a <b>Use on self</b> option if you'd rather drink
+    it or set it off at your own feet. ${ITEM_BASES.filter(b=>b.type==='material').length} crafting materials feed the
+    Crafting screen (K).</div>
     ${generateItemGuideHTML()}` },
   { id:'magic', label:'Magic', html: () => `
     <div class="modal-opt">z opens your unified Abilities screen (spells, techniques, active cybernetics, active
     mutations together). ${SPELLS.length} spells across ${new Set(SPELLS.map(s=>s.school)).size} schools, spanning a real
     power range within each element — e.g. Firebolt → Fireball → Greater Fireball → Meteor Swarm → Sunfire Cataclysm is
-    the same fire damage type at five wildly different power tiers, not five names for the same number. Fire-flavored
-    spells genuinely ignite and spread across flammable terrain; gas/cloud spells (Caustic Gas, Toxic Bloom, Plague Tide,
-    Miasmic Apocalypse) leave a real lingering cloud that affects anyone who walks through it later. Below is the full
-    spell reference across all schools:</div>
+    the same fire damage type at five wildly different power tiers, not five names for the same number. Every offensive
+    or debuff spell is now free-aimed at a tile of your choosing rather than auto-locking onto the nearest enemy — see
+    the Combat tab for details. Fire-flavored spells genuinely ignite and spread across flammable terrain; gas/cloud
+    spells (Caustic Gas, Toxic Bloom, Plague Tide, Miasmic Apocalypse) leave a real cloud that spreads outward while
+    fresh and affects anyone who walks through it later. Below is the full spell reference across all schools:</div>
     ${generateSpellGuideHTML()}` },
   { id:'techniques', label:'Techniques', html: () => `
     <div class="modal-opt">Martial techniques cost Stamina, not Mana — a full combat path for non-casters.
@@ -8140,10 +9092,27 @@ const GUIDE_SECTIONS = [
     rewarded (plus a relationship boost) once the condition is met.</div>` },
   { id:'dungeons', label:'Dungeons', html: () => `
     <div class="modal-opt">&gt; enter/descend, &lt; ascend. Entrances visually match their theme in the overworld and
-    show a recommended level before you commit. Some dungeons carry hazards: hidden traps, choking poison gas, or
-    flooded chambers. Every deepest floor holds a boss whose strength is matched to that specific dungeon's real depth
-    (not just its rarity label), and other floors have a chance at a themed miniboss — a real step up from regular
-    monsters, short of a full boss fight.</div>
+    show a recommended level before you commit. Every deepest floor holds a boss whose strength is matched to that
+    specific dungeon's real depth (not just its rarity label), and other floors have a chance at a themed miniboss — a
+    real step up from regular monsters, short of a full boss fight.</div>
+    <div class="modal-opt" style="margin-top:6px"><b>Dungeons are more than corridors and monsters now.</b> Traps come
+    in six real varieties — darts and rusty spikes (single-tile, immediate damage), fire traps and gas traps (ignite
+    or gas a small area, using the same terrain engine as fire/gas spells), alarm runes (alert monsters across the
+    level to your presence), and collapsing floor sections. Every dungeon has a small baseline chance of traps; dungeons
+    themed specifically around them (Trapped Vault) are dense with a heavier, nastier mix.</div>
+    <div class="modal-opt">Water-hazard dungeons (Flooded Cave, Sunken Temple, Sunken Ruins) now generate a real
+    contiguous pond rather than scattered puddle tiles, always crossed by at least one wooden plank bridge. Cave-genre
+    dungeons occasionally split around a genuine chasm, single-bridge crossing only — and that bridge is flammable.
+    Burn it down (on purpose or by accident) and that route is gone for the rest of the visit.</div>
+    <div class="modal-opt">Any dungeon has a chance of a genuine <b>locked treasure vault</b>: a sealed side room with
+    better loot than the surrounding floor, opened only by a matching key found elsewhere on the level — sometimes
+    carried by a specific guarding monster. Constructed dungeons (castles, crypts, towers, libraries, and similar) can
+    also roll a <b>lever puzzle</b>: several unmarked levers in a room, only one of which actually opens a reward vault
+    nearby — the rest trigger a fire vent or sound an alarm that alerts monsters across the level. There's no way to
+    tell which lever is correct except by trying (or reasoning about your odds).</div>
+    <div class="modal-opt">Rooms in constructed dungeons can also contain statues and idols that block movement and
+    line of sight — real cover and chokepoints instead of an empty box to fight in. Their exact flavor (weathered
+    stone, an inert combat frame, a weeping obsidian idol) matches the dungeon's theme.</div>
     <div class="modal-opt">Each of the ${Object.keys(DUNGEON_THEMES).length} dungeon themes can also roll one of 5
     rarity variants — Weathered, Standard, Ancient, Corrupted, or Legendary — which meaningfully change its danger,
     loot quality, and miniboss odds (Legendary guarantees one). That's roughly ${Object.keys(DUNGEON_THEMES).length * 5}
@@ -8281,7 +9250,17 @@ function runGuideSearch() {
   results.slice(0, 40).forEach(r => { body += `<div class="modal-opt"><span class="dim">[${r.section}]</span> ${r.sent}</div>`; });
   renderModal('Guide Search Results', `<div class="guide-tabs">${tabBar}</div>${searchBar}<hr>${body}`, 'Esc to close.');
 }
-function openHelp() { Sound.play('uiOpen'); gameState = 'help'; renderGuideTab(guideCurrentTab || 'start'); }
+let helpReturnState = 'playing';
+function openHelp() {
+  Sound.play('uiOpen');
+  helpReturnState = (gameState === 'title') ? 'title' : 'playing';
+  gameState = 'help';
+  renderGuideTab(guideCurrentTab || 'start');
+}
+function closeHelp() {
+  if (helpReturnState === 'title') { showTitleScreen(); return; }
+  closeModal();
+}
 
 // ---- save/load menu (accessible mid-game via 'P') ----
 function openSaveLoadMenu() {
@@ -8379,13 +9358,9 @@ function handleKey(e) {
     if (/^[a-z]$/.test(key)) { confirmTravel(key); return; }
     return;
   }
-  if (gameState === 'spelltarget') {
-    if (key === 'Escape') { gameState = 'playing'; closeModal(); return; }
-    if (/^[a-z]$/.test(key)) { confirmSpellTarget(key); return; }
-    return;
-  }
-  if (gameState === 'blinktarget') {
-    if (key === 'Escape') { cancelBlinkTarget(); return; }
+  if (gameState === 'tiletarget') {
+    if (key === 'Escape') { cancelTileTargeting(); return; }
+    if (key === 'Enter' || key === ' ') { e.preventDefault(); quickConfirmTileTarget(); return; }
     return;
   }
   if (gameState === 'dialogue') {
@@ -8429,7 +9404,9 @@ function handleKey(e) {
   if (gameState === 'itemaction') {
     if (key === 'Escape' || key === 'x') { gameState = 'inventory'; invSelectedSlot = null; renderInventory(); return; }
     if (key === 'u' && invSelectedSlot) { unequipSlot(invSelectedSlot); invSelectedSlot = null; gameState='playing'; closeModal(); return; }
+    if (key === 'i' && invSelectedSlot === 'hand') { dipWeaponInFire(); gameState='playing'; closeModal(); return; }
     if (key === 'e') { equipItem(invSelected); gameState='playing'; closeModal(); return; }
+    if (key === 't' && THROWABLE_EFFECTS.has(invSelected.effect)) { const it = invSelected; closeModal(); beginThrowTargeting(it); return; }
     if (key === 'u') { useItem(invSelected); gameState='playing'; closeModal(); return; }
     if (key === 'd') { dropItem(invSelected); gameState='playing'; closeModal(); return; }
     return;
@@ -8469,7 +9446,11 @@ function handleKey(e) {
     return;
   }
   if (gameState === 'help') {
-    if (key === 'Escape') { closeModal(); return; }
+    if (key === 'Escape') { closeHelp(); return; }
+    return;
+  }
+  if (gameState === 'confirmchasm') {
+    if (key === 'y' || key === 'n' || key === 'Escape') { confirmChasmJumpChoice(key === 'Escape' ? 'n' : key); return; }
     return;
   }
 }
