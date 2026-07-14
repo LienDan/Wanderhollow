@@ -782,107 +782,132 @@ const ITEM_BASES = [
   { id:'gold', name:'Gold Coins', type:'misc', glyph:'$', color:'#e0c34a', value:1 },
   { id:'gem', name:'Gemstone', type:'misc', glyph:'*', color:'#5ae0d0', value:50 },
 ];
+// v3 balance pass: every affix now carries an explicit `tier` (0-4). makeItem() uses this to
+// cap which affixes a given drop is allowed to roll, keyed to the rarity it was generated with
+// (itself now derived from *what* dropped it, not a flat constant) -- see makeItem() and
+// lootRarityFor() below. This is what stops a level-1 bandit from ever dropping a tier-4
+// "of Eternity" suffix: rarity 0 loot can only reach tier 1 affixes at best.
 const PREFIXES = [
-  // ---- low quality / bad ----
-  { name:'Rusty', dmgMod:-1, armorMod:-1, valueMult:0.5 },
-  { name:'Chipped', dmgMod:-1, armorMod:0, valueMult:0.6 },
-  { name:'Cracked', dmgMod:0, armorMod:-2, valueMult:0.55 },
-  { name:'Dull', dmgMod:-2, armorMod:0, valueMult:0.45 },
-  { name:'Corroded', dmgMod:-1, armorMod:-1, valueMult:0.4 },
-  { name:'Cursed', dmgMod:-2, armorMod:-2, valueMult:0.3 },
-  { name:'Shoddy', dmgMod:-1, armorMod:-1, valueMult:0.35 },
-  { name:'Waterlogged', dmgMod:-1, armorMod:0, valueMult:0.5 },
-  // ---- ok / decent ----
-  { name:'Sharp', dmgMod:2, armorMod:0, valueMult:1.4 },
-  { name:'Fine', dmgMod:1, armorMod:1, valueMult:1.5 },
-  { name:'Sturdy', dmgMod:0, armorMod:2, valueMult:1.3 },
-  { name:'Polished', dmgMod:1, armorMod:0, valueMult:1.25 },
-  { name:'Weighted', dmgMod:1, armorMod:1, valueMult:1.35 },
-  { name:'Tempered', dmgMod:2, armorMod:1, valueMult:1.55 },
-  { name:'Balanced', dmgMod:1, armorMod:0, valueMult:1.3, dexBonus:1 },
-  { name:'Hardened', dmgMod:0, armorMod:3, valueMult:1.45 },
-  // ---- good ----
-  { name:'Heavy', dmgMod:3, armorMod:1, valueMult:1.6, strReq:3 },
-  { name:'Reinforced', dmgMod:0, armorMod:2, valueMult:1.5 },
-  { name:'Keen', dmgMod:3, armorMod:0, valueMult:1.7 },
-  { name:'Nimble', dmgMod:1, armorMod:0, valueMult:1.6, dexBonus:2 },
-  { name:'Runeforged', dmgMod:2, armorMod:2, valueMult:1.9, intBonus:1 },
-  { name:'Vicious', dmgMod:4, armorMod:0, valueMult:1.75 },
-  { name:'Warded', dmgMod:0, armorMod:4, valueMult:1.8 },
-  { name:'Gilded', dmgMod:1, armorMod:1, valueMult:1.85 },
-  // ---- very good ----
-  { name:'Ancient', dmgMod:2, armorMod:2, valueMult:2.2 },
-  { name:'Masterwork', dmgMod:3, armorMod:3, valueMult:2.8 },
-  { name:'Dwarven', dmgMod:3, armorMod:2, valueMult:2.4 },
-  { name:'Elven', dmgMod:2, armorMod:1, valueMult:2.3, dexBonus:1 },
-  { name:'Draconic', dmgMod:4, armorMod:2, valueMult:2.6 },
-  { name:'Mythril-Laced', dmgMod:2, armorMod:4, valueMult:2.5 },
-  { name:'Radiant', dmgMod:3, armorMod:2, valueMult:2.5, intBonus:1 },
-  { name:'Titanforged', dmgMod:4, armorMod:3, valueMult:2.7, strBonus:1 },
-  // ---- cyberpunk ----
-  { name:'Overclocked', dmgMod:3, armorMod:0, valueMult:1.9 },
-  { name:'Prototype', dmgMod:2, armorMod:2, valueMult:2.1 },
-  { name:'Military-Grade', dmgMod:3, armorMod:3, valueMult:2.4 },
-  { name:'Black Market', dmgMod:2, armorMod:1, valueMult:1.7 },
-  { name:'Experimental', dmgMod:4, armorMod:1, valueMult:2.2 },
-  // ---- eldritch ----
-  { name:'Whispering', dmgMod:2, armorMod:1, valueMult:2.0, intBonus:1 },
-  { name:'Corrupted', dmgMod:3, armorMod:0, valueMult:1.6 },
-  { name:'Void-Touched', dmgMod:3, armorMod:2, valueMult:2.3 },
-  { name:'Unhallowed', dmgMod:2, armorMod:2, valueMult:1.9 },
-  // ---- legendary tier ----
-  { name:'Godslayer', dmgMod:6, armorMod:3, valueMult:3.5, strBonus:2 },
-  { name:'Worldbreaker', dmgMod:7, armorMod:2, valueMult:3.8 },
+  // ---- tier 0: low quality / bad (always in the pool) ----
+  { name:'Rusty', dmgMod:-1, armorMod:-1, valueMult:0.5, tier:0 },
+  { name:'Chipped', dmgMod:-1, armorMod:0, valueMult:0.6, tier:0 },
+  { name:'Cracked', dmgMod:0, armorMod:-2, valueMult:0.55, tier:0 },
+  { name:'Dull', dmgMod:-2, armorMod:0, valueMult:0.45, tier:0 },
+  { name:'Corroded', dmgMod:-1, armorMod:-1, valueMult:0.4, tier:0 },
+  { name:'Cursed', dmgMod:-2, armorMod:-2, valueMult:0.3, tier:0 },
+  { name:'Shoddy', dmgMod:-1, armorMod:-1, valueMult:0.35, tier:0 },
+  { name:'Waterlogged', dmgMod:-1, armorMod:0, valueMult:0.5, tier:0 },
+  // ---- tier 1: ok / decent ----
+  { name:'Sharp', dmgMod:2, armorMod:0, valueMult:1.4, tier:1 },
+  { name:'Fine', dmgMod:1, armorMod:1, valueMult:1.5, tier:1 },
+  { name:'Sturdy', dmgMod:0, armorMod:2, valueMult:1.3, tier:1 },
+  { name:'Polished', dmgMod:1, armorMod:0, valueMult:1.25, tier:1 },
+  { name:'Weighted', dmgMod:1, armorMod:1, valueMult:1.35, tier:1 },
+  { name:'Tempered', dmgMod:2, armorMod:1, valueMult:1.55, tier:1 },
+  { name:'Balanced', dmgMod:1, armorMod:0, valueMult:1.3, dexBonus:1, tier:1 },
+  { name:'Hardened', dmgMod:0, armorMod:3, valueMult:1.45, tier:1 },
+  // ---- tier 2: good ----
+  { name:'Heavy', dmgMod:3, armorMod:1, valueMult:1.6, strReq:3, tier:2 },
+  { name:'Reinforced', dmgMod:0, armorMod:2, valueMult:1.5, tier:2 },
+  { name:'Keen', dmgMod:3, armorMod:0, valueMult:1.7, tier:2 },
+  { name:'Nimble', dmgMod:1, armorMod:0, valueMult:1.6, dexBonus:2, tier:2 },
+  { name:'Runeforged', dmgMod:2, armorMod:2, valueMult:1.9, intBonus:1, tier:2 },
+  { name:'Vicious', dmgMod:4, armorMod:0, valueMult:1.75, tier:2 },
+  { name:'Warded', dmgMod:0, armorMod:4, valueMult:1.8, tier:2 },
+  { name:'Gilded', dmgMod:1, armorMod:1, valueMult:1.85, tier:2 },
+  // ---- tier 3: very good ----
+  { name:'Ancient', dmgMod:2, armorMod:2, valueMult:2.2, tier:3 },
+  { name:'Masterwork', dmgMod:3, armorMod:3, valueMult:2.8, tier:3 },
+  { name:'Dwarven', dmgMod:3, armorMod:2, valueMult:2.4, tier:3 },
+  { name:'Elven', dmgMod:2, armorMod:1, valueMult:2.3, dexBonus:1, tier:3 },
+  { name:'Draconic', dmgMod:4, armorMod:2, valueMult:2.6, tier:3 },
+  { name:'Mythril-Laced', dmgMod:2, armorMod:4, valueMult:2.5, tier:3 },
+  { name:'Radiant', dmgMod:3, armorMod:2, valueMult:2.5, intBonus:1, tier:3 },
+  { name:'Titanforged', dmgMod:4, armorMod:3, valueMult:2.7, strBonus:1, tier:3 },
+  // ---- tier 3: cyberpunk ----
+  { name:'Overclocked', dmgMod:3, armorMod:0, valueMult:1.9, tier:3 },
+  { name:'Prototype', dmgMod:2, armorMod:2, valueMult:2.1, tier:3 },
+  { name:'Military-Grade', dmgMod:3, armorMod:3, valueMult:2.4, tier:3 },
+  { name:'Black Market', dmgMod:2, armorMod:1, valueMult:1.7, tier:2 },
+  { name:'Experimental', dmgMod:4, armorMod:1, valueMult:2.2, tier:3 },
+  // ---- tier 3: eldritch ----
+  { name:'Whispering', dmgMod:2, armorMod:1, valueMult:2.0, intBonus:1, tier:3 },
+  { name:'Corrupted', dmgMod:3, armorMod:0, valueMult:1.6, tier:2 },
+  { name:'Void-Touched', dmgMod:3, armorMod:2, valueMult:2.3, tier:3 },
+  { name:'Unhallowed', dmgMod:2, armorMod:2, valueMult:1.9, tier:3 },
+  // ---- tier 4: legendary (bosses / deep vaults / rare finds only) ----
+  { name:'Godslayer', dmgMod:6, armorMod:3, valueMult:3.5, strBonus:2, tier:4 },
+  { name:'Worldbreaker', dmgMod:7, armorMod:2, valueMult:3.8, tier:4 },
 ];
 const SUFFIXES = [
-  // ---- weak / niche ----
-  { name:'of the Novice', valueMult:0.7 },
-  { name:'of Splinters', dmgMod:-1, valueMult:0.6 },
-  { name:'of Weakness', strBonus:-1, valueMult:0.5 },
-  { name:'of Fragility', armorMod:-2, valueMult:0.5 },
-  // ---- ok ----
-  { name:'of the Fox', dexBonus:2, valueMult:1.4 },
-  { name:'of the Bear', strBonus:2, valueMult:1.4 },
-  { name:'of the Owl', intBonus:2, valueMult:1.4 },
-  { name:'of the Turtle', conBonus:2, valueMult:1.4 },
-  { name:'of Balance', strBonus:1, dexBonus:1, valueMult:1.5 },
-  { name:'of Warding', armorMod:2, valueMult:1.5 },
-  { name:'of Mending', lifesteal:0.08, valueMult:1.4 },
-  // ---- good ----
-  { name:'of Flames', fireDmg:3, valueMult:1.6 },
-  { name:'of Frost', frostDmg:3, valueMult:1.6 },
-  { name:'of Venom', poisonDmg:2, valueMult:1.5 },
-  { name:'of the Wolf', dexBonus:3, valueMult:1.7 },
-  { name:'of the Ox', strBonus:3, valueMult:1.7 },
-  { name:'of the Raven', intBonus:3, valueMult:1.7 },
-  { name:'of Stone Skin', conBonus:3, armorMod:1, valueMult:1.8 },
-  { name:'of Piercing', armorPierce:2, valueMult:1.7 },
-  { name:'of the Vampire', lifesteal:0.2, valueMult:1.9 },
-  // ---- very good ----
-  { name:'of Infernos', fireDmg:5, valueMult:2.1 },
-  { name:'of the Glacier', frostDmg:5, valueMult:2.1 },
-  { name:'of Plague', poisonDmg:4, valueMult:2.0 },
-  { name:'of Kings', strBonus:1, dexBonus:1, intBonus:1, valueMult:2.5 },
-  { name:'of the Archmage', intBonus:4, valueMult:2.3 },
-  { name:'of the Champion', strBonus:4, valueMult:2.3 },
-  { name:'of the Assassin', dexBonus:4, valueMult:2.3, armorPierce:1 },
-  { name:'of Undying', conBonus:4, valueMult:2.4 },
-  { name:'of the Void', dmgMod:4, valueMult:2.2 },
-  // ---- cyberpunk ----
-  { name:'of the Grid', intBonus:2, dexBonus:1, valueMult:2.0 },
-  { name:'of Overcharge', dmgMod:3, valueMult:2.0 },
-  { name:'of the Machine', conBonus:2, armorMod:2, valueMult:2.1 },
-  // ---- eldritch ----
-  { name:'of Whispers', intBonus:3, valueMult:2.0 },
-  { name:'of the Deep', dmgMod:2, poisonDmg:2, valueMult:2.0 },
-  { name:'of Madness', intBonus:2, dmgMod:2, valueMult:2.1 },
-  { name:'of the Abyss', dmgMod:5, armorMod:2, valueMult:2.6 },
-  // ---- legendary tier ----
-  { name:'of the Ascended', strBonus:3, dexBonus:3, intBonus:3, conBonus:3, valueMult:4.0 },
-  { name:'of Eternity', armorMod:6, conBonus:4, valueMult:3.8 },
-  { name:'of Apocalypse', dmgMod:8, fireDmg:6, valueMult:4.2 },
+  // ---- tier 0: weak / niche ----
+  { name:'of the Novice', valueMult:0.7, tier:0 },
+  { name:'of Splinters', dmgMod:-1, valueMult:0.6, tier:0 },
+  { name:'of Weakness', strBonus:-1, valueMult:0.5, tier:0 },
+  { name:'of Fragility', armorMod:-2, valueMult:0.5, tier:0 },
+  // ---- tier 1: ok ----
+  { name:'of the Fox', dexBonus:2, valueMult:1.4, tier:1 },
+  { name:'of the Bear', strBonus:2, valueMult:1.4, tier:1 },
+  { name:'of the Owl', intBonus:2, valueMult:1.4, tier:1 },
+  { name:'of the Turtle', conBonus:2, valueMult:1.4, tier:1 },
+  { name:'of Balance', strBonus:1, dexBonus:1, valueMult:1.5, tier:1 },
+  { name:'of Warding', armorMod:2, valueMult:1.5, tier:1 },
+  { name:'of Mending', lifesteal:0.08, valueMult:1.4, tier:1 },
+  // ---- tier 2: good ----
+  { name:'of Flames', fireDmg:3, valueMult:1.6, tier:2 },
+  { name:'of Frost', frostDmg:3, valueMult:1.6, tier:2 },
+  { name:'of Venom', poisonDmg:2, valueMult:1.5, tier:2 },
+  { name:'of the Wolf', dexBonus:3, valueMult:1.7, tier:2 },
+  { name:'of the Ox', strBonus:3, valueMult:1.7, tier:2 },
+  { name:'of the Raven', intBonus:3, valueMult:1.7, tier:2 },
+  { name:'of Stone Skin', conBonus:3, armorMod:1, valueMult:1.8, tier:2 },
+  { name:'of Piercing', armorPierce:2, valueMult:1.7, tier:2 },
+  { name:'of the Vampire', lifesteal:0.2, valueMult:1.9, tier:2 },
+  // ---- tier 3: very good ----
+  { name:'of Infernos', fireDmg:5, valueMult:2.1, tier:3 },
+  { name:'of the Glacier', frostDmg:5, valueMult:2.1, tier:3 },
+  { name:'of Plague', poisonDmg:4, valueMult:2.0, tier:3 },
+  { name:'of Kings', strBonus:1, dexBonus:1, intBonus:1, valueMult:2.5, tier:3 },
+  { name:'of the Archmage', intBonus:4, valueMult:2.3, tier:3 },
+  { name:'of the Champion', strBonus:4, valueMult:2.3, tier:3 },
+  { name:'of the Assassin', dexBonus:4, valueMult:2.3, armorPierce:1, tier:3 },
+  { name:'of Undying', conBonus:4, valueMult:2.4, tier:3 },
+  { name:'of the Void', dmgMod:4, valueMult:2.2, tier:3 },
+  // ---- tier 3: cyberpunk ----
+  { name:'of the Grid', intBonus:2, dexBonus:1, valueMult:2.0, tier:2 },
+  { name:'of Overcharge', dmgMod:3, valueMult:2.0, tier:2 },
+  { name:'of the Machine', conBonus:2, armorMod:2, valueMult:2.1, tier:3 },
+  // ---- tier 3: eldritch ----
+  { name:'of Whispers', intBonus:3, valueMult:2.0, tier:2 },
+  { name:'of the Deep', dmgMod:2, poisonDmg:2, valueMult:2.0, tier:2 },
+  { name:'of Madness', intBonus:2, dmgMod:2, valueMult:2.1, tier:3 },
+  { name:'of the Abyss', dmgMod:5, armorMod:2, valueMult:2.6, tier:3 },
+  // ---- tier 4: legendary (bosses / deep vaults / rare finds only) ----
+  { name:'of the Ascended', strBonus:3, dexBonus:3, intBonus:3, conBonus:3, valueMult:4.0, tier:4 },
+  { name:'of Eternity', armorMod:6, conBonus:4, valueMult:3.8, tier:4 },
+  { name:'of Apocalypse', dmgMod:8, fireDmg:6, valueMult:4.2, tier:4 },
 ];
 
+// rarity (0-4) is now the single knob controlling how good a weapon/armor drop can be: it caps
+// which affix tier can roll (see PREFIXES/SUFFIXES `tier`) AND is combined with the base item's
+// own valueTier to set starting durability. Callers no longer pass a flat/arbitrary rarity --
+// see lootRarityFor() for how rarity is derived from *what* is dropping the item.
+function affixPoolForRarity(pool, rarity) {
+  // rarity 0 loot can still occasionally surprise you with a tier-1 affix (small chance), but
+  // never anything above it; each rarity step upward unlocks one more tier, capping at 4.
+  const maxTier = Math.min(4, rarity);
+  const allowed = pool.filter(m => m.tier <= maxTier);
+  return allowed.length ? allowed : pool.filter(m => m.tier === 0);
+}
+function baseDurabilityFor(base, affixTier) {
+  if (base.type !== 'weapon' && base.type !== 'armor') return null;
+  // higher-value base items are inherently better-made and higher affix tiers represent finer
+  // craftsmanship/materials, so both push durability up. True legendary-tier gear (tier 4 affix,
+  // i.e. a "Godslayer" / "of Eternity" roll) is built to never realistically break in play.
+  if (affixTier >= 4) return Infinity;
+  const base60 = 30 + (base.valueTier || 0) * 18 + affixTier * 14;
+  return base60;
+}
 function makeItem(baseId, rarity, rng) {
   rng = rng || Math.random;
   const base = ITEM_BASES.find(b => b.id === baseId);
@@ -892,8 +917,8 @@ function makeItem(baseId, rarity, rng) {
   it.mods = [];
   rarity = rarity || 0;
   if ((base.type === 'weapon' || base.type === 'armor')) {
-    if (rng() < 0.30 + rarity * 0.12) it.mods.push(choice(rng, PREFIXES));
-    if (rng() < 0.22 + rarity * 0.12) it.mods.push(choice(rng, SUFFIXES));
+    if (rng() < 0.30 + rarity * 0.08) it.mods.push(choice(rng, affixPoolForRarity(PREFIXES, rarity)));
+    if (rng() < 0.22 + rarity * 0.08) it.mods.push(choice(rng, affixPoolForRarity(SUFFIXES, rarity)));
   }
   let name = base.name;
   let dmg = base.dmg ? base.dmg.slice() : null;
@@ -901,6 +926,8 @@ function makeItem(baseId, rarity, rng) {
   let value = base.value;
   let bonuses = { str:0, dex:0, int:0, con:0 };
   let pre = null, suf = null;
+  let affixTier = 0;
+  let strReqDelta = 0;
   for (const m of it.mods) {
     if (m.dmgMod !== undefined && dmg) { dmg[0] = Math.max(1, dmg[0] + m.dmgMod); dmg[1] = Math.max(dmg[0], dmg[1] + m.dmgMod); }
     if (m.armorMod !== undefined) armor += m.armorMod;
@@ -912,7 +939,9 @@ function makeItem(baseId, rarity, rng) {
     if (m.frostDmg) it.frostDmg = (it.frostDmg||0) + m.frostDmg;
     if (m.poisonDmg) it.poisonDmg = (it.poisonDmg||0) + m.poisonDmg;
     if (m.lifesteal) it.lifesteal = m.lifesteal;
+    if (m.strReq) strReqDelta += m.strReq; // e.g. "Heavy" makes an item bulkier and harder to use
     value *= m.valueMult;
+    affixTier = Math.max(affixTier, m.tier || 0);
     if (PREFIXES.includes(m)) pre = m.name; else suf = m.name;
   }
   if (pre) name = pre + ' ' + name;
@@ -920,8 +949,12 @@ function makeItem(baseId, rarity, rng) {
   it.name = name;
   if (dmg) it.dmg = dmg;
   if (base.type === 'armor') it.armor = armor;
+  if (strReqDelta && (base.type === 'weapon' || base.type === 'armor')) it.str = Math.max(0, (base.str || 0) + strReqDelta);
   it.value = Math.max(1, Math.round(value));
   it.bonuses = bonuses;
+  // ---- durability (v3): normal attacks never touch this -- see wearItemDurability() in combat.
+  const maxDur = baseDurabilityFor(base, affixTier);
+  if (maxDur !== null) { it.maxDurability = maxDur; it.durability = maxDur; it.broken = false; }
   return it;
 }
 
@@ -1111,7 +1144,7 @@ MONSTER_BASES.stone_titan = { name:'Stone Titan', glyph:'&', color:'#9a9a9a', hp
 MONSTER_BASES.iron_sovereign = { name:'The Iron Sovereign', glyph:'&', color:'#c0c0d0', hp:240, str:26, dex:6, atk:[10,20], armor:12, xp:380, behavior:'aggressive', dtier:6, boss:true, bossTier:'rare', faction:'construct', multiattack:2 };
 MONSTER_BASES.the_harbinger = { name:'The Harbinger', glyph:'H', color:'#3a0a5a', hp:200, str:18, dex:12, atk:[8,17], armor:3, xp:350, behavior:'ranged', dtier:6, boss:true, bossTier:'rare', faction:'eldritch', causesConfuse:true, causesFear:true, multiattack:2 };
 MONSTER_BASES.abyssal_leviathan = { name:'Abyssal Leviathan', glyph:'K', color:'#0a3a4a', hp:170, str:20, dex:8, atk:[8,17], armor:4, xp:280, behavior:'aggressive', dtier:4, boss:true, bossTier:'uncommon', faction:'aquatic', multiattack:2 };
-MONSTER_BASES.the_maw = { name:'The Maw', glyph:'O', color:'#5ac93a', hp:80, str:14, dex:2, atk:[4,10], armor:0, xp:55, behavior:'aggressive', dtier:2, boss:true, bossTier:'common', faction:'ooze', splitInto:'gelatinous_cube', splitCount:2 };
+MONSTER_BASES.the_maw = { name:'The Maw', glyph:'O', color:'#5ac93a', hp:80, str:14, dex:2, atk:[4,10], armor:0, xp:55, behavior:'aggressive', dtier:2, boss:true, bossTier:'common', faction:'ooze', splitInto:'gelatinous_cube', splitCount:2, corrosive:true };
 MONSTER_BASES.frost_giant_king = { name:'Frost Giant King', glyph:'O', color:'#c0e0e8', hp:180, str:26, dex:5, atk:[8,17], armor:5, xp:260, behavior:'charger', multiTile:2, dtier:4, boss:true, bossTier:'uncommon', faction:'giantkin', frost:4 };
 MONSTER_BASES.core_overmind = { name:'Core Overmind', glyph:'@', color:'#e03aa0', hp:210, str:16, dex:10, atk:[6,14], armor:7, xp:340, behavior:'ranged', dtier:5, boss:true, bossTier:'rare', faction:'cyber', summonId:'security_drone', summonMax:4 };
 MONSTER_BASES.verdant_horror = { name:'The Verdant Horror', glyph:'"', color:'#8a3a5a', hp:110, str:15, dex:3, atk:[4,10], armor:2, xp:90, behavior:'gascloud', dtier:3, boss:true, bossTier:'common', faction:'plant', gasRadius:4, gasDamage:6 };
@@ -1155,6 +1188,7 @@ const RECIPES = [
   { id:'stew', name:'Hearty Stew', category:'cooking', inputs:[{id:'meat_raw',qty:2},{id:'herb',qty:1}], output:{id:'stew',qty:1} },
   { id:'antidote', name:'Brew Antidote', category:'crafting', inputs:[{id:'herb',qty:2}], output:{id:'antidote',qty:1} },
   { id:'smelt_iron', name:'Smelt Iron Ingot', category:'crafting', inputs:[{id:'ore',qty:2}], output:{id:'iron_ingot',qty:1} },
+  { id:'craft_repair_kit', name:'Assemble Repair Kit', category:'crafting', inputs:[{id:'iron_ingot',qty:1},{id:'leather',qty:1}], output:{id:'repair_kit',qty:1} },
   { id:'craft_leather', name:'Craft Leather Armor', category:'crafting', inputs:[{id:'pelt',qty:3}], output:{id:'leather',qty:1} },
   { id:'craft_boneamulet', name:'Craft Bone Amulet', category:'crafting', inputs:[{id:'bone',qty:3}], output:{id:'amulet',qty:1} },
   { id:'craft_gloves', name:'Stitch Leather Gloves', category:'crafting', inputs:[{id:'leather_scrap',qty:2},{id:'cloth',qty:1}], output:{id:'gloves',qty:1} },
@@ -1261,6 +1295,7 @@ const TALENTS_V2 = [
   { id:'secondwind', name:'Second Wind', desc:'Once per rest, surviving a killing blow at 1 HP instead of dying', tier:2, requires:{level:5}, apply:()=>{ player.secondWindMax=(player.secondWindMax||0)+1; player.secondWindCharges=player.secondWindMax; } },
   { id:'quickcast', name:'Quickcast', desc:'All spells cost 1 less MP (minimum 1)', tier:2, requires:{level:5}, apply:()=>{ player.spellCostReduction=(player.spellCostReduction||0)+1; } },
   { id:'waterborn', name:'Waterborn', desc:'Swimming no longer drains stamina', tier:2, requires:{level:5}, apply:()=>{ player.freeSwim=true; } },
+  { id:'blacksmithstouch', name:"Blacksmith's Touch", desc:'Equipped gear slowly repairs itself over time (1 durability every 20 turns)', tier:2, requires:{level:5}, apply:()=>{ player.autoRepairRate=(player.autoRepairRate||0)+1; } },
   // tier 3 — requires level 10 + a specific tier-2 talent
   { id:'undying', name:'Undying', desc:'Second Wind can trigger one additional time before resting', tier:3, requires:{level:10, talent:'secondwind'}, apply:()=>{ player.secondWindMax=(player.secondWindMax||1)+1; player.secondWindCharges=player.secondWindMax; } },
   { id:'archmage', name:'Archmage', desc:'+20% damage from all offensive spells', tier:3, requires:{level:10, talent:'manaflow'}, apply:()=>{ player.spellDmgBonus=0.2; } },
@@ -1422,6 +1457,7 @@ const TECHNIQUES = [
   { id:'pressurepoint', name:'Pressure Point Strike', resource:'stamina', mp:11, type:'execute', power:[6,12], range:1, school:'Brawling', desc:'A precise strike against a weakened foe\'s vitals.' },
   // Defense / Shielding
   { id:'shieldwall', name:'Shield Wall', resource:'stamina', mp:10, type:'buff', stat:'armor', power:10, dur:12, range:0, school:'Defense', desc:'You hunker down behind your shield, near-impervious for a time.' },
+  { id:'fieldrepair', name:'Field Repair', resource:'stamina', mp:12, type:'repair', power:20, range:0, school:'Defense', desc:'A practiced hand tightens straps and hammers out dents, right in the middle of an expedition.' },
   { id:'battlerecovery', name:'Battle Recovery', resource:'stamina', mp:15, type:'heal', power:[10,18], range:0, school:'Defense', desc:'Years of training let you fight through pain and keep going.' },
   { id:'fortify', name:'Fortify', resource:'stamina', mp:12, type:'buff', stat:'armor', power:10, dur:14, range:0, school:'Defense', desc:'You brace your whole body, ready for a prolonged fight.' },
   { id:'vigilantguard', name:'Vigilant Guard', resource:'stamina', mp:9, type:'buff', stat:'evasion', power:0.15, dur:12, range:0, school:'Defense', desc:'Every sense sharpens, watching for the next attack.' },
@@ -1534,6 +1570,7 @@ TECHNIQUES.push(
 // spells/techniques once installed, spending Charge.
 const CYBERNETICS = [
   { id:'subdermalplating', name:'Subdermal Plating', category:'Combat', activation:'passive', desc:'Armor plates woven under the skin.', apply:()=>{ player.cyberArmor=(player.cyberArmor||0)+4; }, remove:()=>{ player.cyberArmor=(player.cyberArmor||0)-4; } },
+  { id:'nanoresweave', name:'Nanite Repair Mesh', category:'Combat', activation:'passive', desc:'Microscopic drones thread through your gear, continuously undoing wear.', apply:()=>{ player.autoRepairRate=(player.autoRepairRate||0)+2; }, remove:()=>{ player.autoRepairRate=(player.autoRepairRate||0)-2; } },
   { id:'reflexbooster', name:'Reflex Booster', category:'Combat', activation:'passive', desc:'Nerve-response accelerator laced through the spine.', apply:()=>{ player.dex+=3; }, remove:()=>{ player.dex-=3; } },
   { id:'arcbladeimplant', name:'Arc Blade Implant', category:'Combat', activation:'passive', desc:'A retractable blade crackling with stored current.', apply:()=>{ player.cyberDmgBonus=(player.cyberDmgBonus||0)+3; }, remove:()=>{ player.cyberDmgBonus=(player.cyberDmgBonus||0)-3; } },
   { id:'overchargeservos', name:'Overcharge Servos', category:'Combat', activation:'active', resource:'charge', mp:20, type:'buff', stat:'str', power:6, dur:12, range:0, desc:'Floods your muscles with stored power for a short, brutal burst.' },
@@ -1664,6 +1701,7 @@ const MUTATIONS = [
   { id:'adrenalglands', name:'Adrenal Glands (Mutation)', category:'Physical', activation:'passive', corruptionReq:0, desc:'Overgrown glands flood your body with strange humors.', apply:()=>{ player.dex+=2; } },
   { id:'ironbones', name:'Iron Bones', category:'Physical', activation:'passive', corruptionReq:10, desc:'Your skeleton has begun to calcify into something denser than bone.', apply:()=>{ player.maxHp+=15; player.hp+=15; } },
   { id:'vestigialwings', name:'Vestigial Wings', category:'Physical', activation:'active', corruptionReq:25, resource:'hp', selfCost:8, type:'blinklike', power:6, range:0, desc:'Barely-functional wings let you glide a short distance.' },
+  { id:'fleshmelding', name:'Flesh-Melding Symbiosis', category:'Physical', activation:'passive', corruptionReq:20, desc:'Your equipment has begun fusing with your body, knitting itself whole using your own vitality.', apply:()=>{ player.autoRepairRate=(player.autoRepairRate||0)+2; }, remove:()=>{ player.autoRepairRate=(player.autoRepairRate||0)-2; } },
 
   { id:'mindspike', name:'Mind Spike', category:'Psychic', activation:'active', corruptionReq:10, resource:'hp', selfCost:6, type:'damage', power:[7,14], range:5, desc:'A lance of pure psychic force.' },
   { id:'fearaura', name:'Fear Aura', category:'Psychic', activation:'active', corruptionReq:15, resource:'hp', selfCost:8, type:'debuff', stat:'fear', power:1, dur:8, range:5, aoe:true, aoeRadius:2, desc:'Your presence alone unravels the minds of nearby foes.' },
@@ -2392,8 +2430,34 @@ ITEM_BASES.push(
   { id:'scroll_poison', name:'Scroll of Toxic Cloud', type:'scroll', effect:'aoepoison', power:8, radius:3, glyph:'?', color:'#5ac93a', value:30 },
   { id:'scroll_recall', name:'Scroll of Recall', type:'scroll', effect:'recall', glyph:'?', color:'#5ae0d0', value:40 },
   { id:'scroll_cureall', name:'Scroll of Cleansing', type:'scroll', effect:'cureall', glyph:'?', color:'#e0e0a0', value:26 },
+  // ---- repair kits (v3 durability system) ----
+  { id:'repair_kit', name:'Repair Kit', type:'consumable', effect:'repair', power:25, glyph:'&', color:'#a09070', value:18 },
+  { id:'masters_repair_kit', name:"Master's Repair Kit", type:'consumable', effect:'repair', power:60, glyph:'&', color:'#e0a03a', value:55 },
   // ---- food ----
   { id:'trail_rations', name:'Trail Rations', type:'consumable', effect:'food', power:1, glyph:'%', color:'#c9a06a', value:6 },
+);
+
+// ---- v3 balance pass: item requirements & value tiers ----
+// Weapons already carried an unused `str` field on every base (a requirement that was never
+// enforced anywhere). Armor never had an equivalent, so heavy plate could be worn by a
+// level-1 wizard with 10 STR exactly as easily as a light robe. This pass:
+//   1. derives a STR requirement for body/head/feet/gloves/offhand armor from its armor rating
+//      (heavier protection needs more muscle to wear without penalty -- see equipItem());
+//   2. tags every weapon/armor base with a `valueTier` (0-4) so loot generation can refuse to
+//      let a trash monster drop something far above its station (see lootRarityFor()/dropLoot()).
+(function finalizeItemRequirements() {
+  const NO_STR_REQ_SLOTS = new Set(['ring', 'amulet', 'cloak']); // magical accessories, not brawn
+  ITEM_BASES.forEach(b => {
+    if (b.type === 'armor' && !NO_STR_REQ_SLOTS.has(b.slot)) {
+      b.str = Math.max(0, Math.round((b.armor || 0) * 1.35));
+    }
+    if (b.type === 'weapon' || b.type === 'armor') {
+      const v = b.value || 0;
+      b.valueTier = v < 20 ? 0 : v < 50 ? 1 : v < 100 ? 2 : v < 200 ? 3 : 4;
+    }
+  });
+})();
+ITEM_BASES.push(
   { id:'roasted_fish', name:'Roasted Fish', type:'consumable', effect:'heal', power:12, glyph:'%', color:'#e0a05a', value:8 },
   { id:'spiced_wine', name:'Spiced Wine', type:'consumable', effect:'buffstr', power:1, glyph:'%', color:'#8a1a3a', value:12 },
 );
@@ -2414,6 +2478,7 @@ SPELLS.push(
   { id:'cleanse', name:'Cleanse', mp:8, type:'cleanse', range:0, school:'Restoration', desc:'Purges poison and fear from your body and mind.' },
   { id:'renewal', name:'Renewal', mp:10, type:'buff', stat:'regen', power:6, dur:16, range:0, school:'Restoration', desc:'A strong, lingering regenerative glow.' },
   { id:'wardskin', name:'Wardskin', mp:8, type:'buff', stat:'armor', power:6, dur:14, range:0, school:'Restoration', desc:'Toughens your skin like bark.' },
+  { id:'mending', name:'Mending', mp:14, type:'repair', power:35, range:0, school:'Restoration', desc:'Threads of restorative magic knit your weathered gear back together.' },
   // Alchemy
   { id:'acidflask', name:'Acid Flask', mp:7, type:'debuff', stat:'armor', power:-4, dur:12, range:5, school:'Alchemy', desc:'Hurls corrosive acid, eating away at armor.' },
   { id:'causticgas', name:'Caustic Gas', mp:8, type:'debuff', stat:'poison', power:4, dur:6, range:5, school:'Alchemy', desc:'A billowing cloud of noxious gas.' },
@@ -2534,6 +2599,31 @@ SPELLS.push(
   { id:'sanctuaryward', name:'Sanctuary Ward', mp:24, type:'buff', stat:'armor', power:16, dur:18, range:0, school:'Restoration', tier:3, desc:'A steady, powerful ward against further harm.' },
 );
 
+// ---- v3 balance pass: soft stat requirements for spells & techniques ----
+// A wizard could always learn Meteor Swarm at 10 STR and a warrior could always learn it too --
+// nothing gated ability *power* against the stat that ability's school actually represents.
+// This tags every spell with an INT requirement (arcane learning) and every martial technique
+// with a STR or DEX requirement depending on its weapon school, scaled off the ability's own
+// resource cost/tier so late-tier abilities expect a genuinely built-out character. Being under
+// the requirement doesn't lock the ability out (see castSpell()/applyEffectToTarget()) -- it
+// instead risks a fizzle and pulls damage down, which is enough of a tax that min-maxing into
+// an off-stat ability stops being free without forbidding experimentation or multiclassing.
+const TECHNIQUE_DEX_SCHOOLS = new Set(['Daggers', 'Dual Wielding', 'Archery', 'Monastic Arts']);
+(function finalizeAbilityRequirements() {
+  SPELLS.forEach(s => { s.reqStat = 'int'; s.req = 8 + Math.round((s.mp || 8) * 0.75); });
+  TECHNIQUES.forEach(t => {
+    t.reqStat = TECHNIQUE_DEX_SCHOOLS.has(t.school) ? 'dex' : 'str';
+    t.req = 8 + Math.round((t.mp || 8) * 0.6);
+  });
+})();
+function abilityRequirementDeficit(ability) {
+  if (!ability || !ability.reqStat) return 0;
+  const have = ability.reqStat === 'int' ? player.int : (ability.reqStat === 'dex' ? effDex(player) : effStr(player));
+  return Math.max(0, ability.req - have);
+}
+// shared by castSpell (fizzle chance) and applyEffectToTarget (damage falloff) so the two stay consistent
+function abilityPenaltyFactor(deficit) { return Math.max(0.4, 1 - deficit * 0.05); }
+
 
 // ---- expanded talent tree with prerequisites (tiers) ----
 
@@ -2563,12 +2653,17 @@ Object.assign(DUNGEON_THEMES, {
 });
 
 // ---- character creation costs & pools ----
-// v2: point budget raised from 20 to 24 so a hybrid build (e.g. a couple of spells/techniques
-// *plus* a mutation or an implant) fits comfortably alongside the stat spread of any premade
-// archetype, with room left over for starting gold/items. Every premade archetype's attribute +
-// ability package (the priciest is the Warrior at 12pts, Necromancer at 11pts) still costs well
-// under the budget, so it remains fully recreatable with points to spare for gold/equipment.
-const CREATION_POINTS = 24;
+// v3 balance pass: budget brought back down from 24 to 20, and see CREATION_MAX_STAT_ADD below --
+// stats, abilities, and starting gold/items all still draw from this one shared pool, but a build
+// can no longer pour the whole thing into a single stat. Every premade archetype's attribute +
+// ability package (the priciest is the Warrior-equivalent spread, ~12pts of abilities alone before
+// stats) still fits well inside the budget, so hybrid/multiclass custom builds remain viable.
+const CREATION_POINTS = 20;
+// v3 balance pass: nothing previously stopped a custom build from dumping every point into a
+// single stat (e.g. +24 STR from a 24-point budget, turning a level-1 character into a 34-STR
+// outlier no premade archetype gets close to). Capping how much any one stat can be pushed during
+// creation keeps "hybrid, sandboxy builds" viable while ruling out that one degenerate case.
+const CREATION_MAX_STAT_ADD = 6;
 const CREATION_SPELL_COST = (spell) => Math.max(1, Math.round((spell.mp || 8) / 4));
 const CREATION_TECHNIQUE_COST = (tech) => Math.max(1, Math.round((tech.mp || 8) / 4));
 // Eldritch mutations: cost scales with how much Corruption they'd normally require to unlock,
@@ -2807,8 +2902,8 @@ MONSTER_BASES.siren = { name:'Siren', glyph:'m', color:'#5aa0c0', hp:20, str:8, 
 MONSTER_BASES.kraken_spawn = { name:'Kraken Spawn', glyph:'K', color:'#1a4a5a', hp:44, str:15, dex:8, atk:[4,9], armor:2, xp:40, behavior:'aggressive', dtier:3, faction:'aquatic', aquatic:true, multiattack:2 };
 
 // ---- ooze (sewer, flooded_cave) ----
-MONSTER_BASES.acid_slime = { name:'Acid Slime', glyph:'j', color:'#8ac93a', hp:14, str:6, dex:2, atk:[1,4], armor:0, xp:7, behavior:'aggressive', dtier:1, faction:'ooze', splitInto:'slime_small', splitCount:2, armorPierce:1 };
-MONSTER_BASES.gelatinous_cube = { name:'Gelatinous Cube', glyph:'O', color:'#a0e0d0', hp:34, str:10, dex:1, atk:[2,6], armor:0, xp:20, behavior:'aggressive', dtier:2, faction:'ooze', splitInto:'acid_slime', splitCount:2 };
+MONSTER_BASES.acid_slime = { name:'Acid Slime', glyph:'j', color:'#8ac93a', hp:14, str:6, dex:2, atk:[1,4], armor:0, xp:7, behavior:'aggressive', dtier:1, faction:'ooze', splitInto:'slime_small', splitCount:2, armorPierce:1, corrosive:true };
+MONSTER_BASES.gelatinous_cube = { name:'Gelatinous Cube', glyph:'O', color:'#a0e0d0', hp:34, str:10, dex:1, atk:[2,6], armor:0, xp:20, behavior:'aggressive', dtier:2, faction:'ooze', splitInto:'acid_slime', splitCount:2, corrosive:true };
 
 // ---- cyberpunk (cyber_vault, ruined_lab, corrupted_facility) ----
 MONSTER_BASES.security_drone = { name:'Security Drone', glyph:'v', color:'#4ae0d0', hp:14, str:6, dex:14, atk:[2,5], armor:1, xp:14, behavior:'ranged', dtier:2, faction:'cyber', flying:true };
@@ -2913,8 +3008,18 @@ const MONSTER_EXTRA_FIELDS = [
   'faction', 'splitInto', 'splitCount', 'multiTile', 'breathWeapon', 'gasRadius', 'gasDamage',
   'summonId', 'summonMax', 'ambush', 'ambushRange', 'burrower', 'phaser', 'berserkHpPct',
   'multiattack', 'range', 'preferredRange', 'miniboss', 'flying', 'aquatic', 'armorPierce',
-  'causesFear', 'causesConfuse', 'bossPower',
+  'causesFear', 'causesConfuse', 'bossPower', 'corrosive',
 ];
+// ---- v3 balance pass: overworld monsters now scale with distance from the origin ----
+// Previously every overworld spawn passed a flat depthScale of 1 no matter how far you'd
+// wandered, so the surface world never got harder -- only dungeons did. This mirrors the
+// distance-based curve pickSettlementTier() already uses for settlement size, applied to combat
+// stats instead: near spawn stays exactly base-stat (a fair, forgiving start), and danger ramps
+// up gradually the further out you explore, capping at 4x so it never spirals into nonsense.
+function overworldDangerScale(cx, cy) {
+  const dist = Math.sqrt(cx * cx + cy * cy);
+  return Math.min(4, 1 + dist / 15);
+}
 function makeMonster(monsterId, x, y, depthScale, rng) {
   rng = rng || Math.random;
   const base = MONSTER_BASES[monsterId];
@@ -3074,6 +3179,7 @@ function generateShopInventory(roleId, rng) {
   }
   if (roleId === 'fisherman') items.unshift(makeItem('raft', 0, rng));
   if (roleId === 'merchant' && rng() < 0.5) items.push(makeItem('compass', 0, rng));
+  if (roleId === 'blacksmith' || roleId === 'cybersmith') { items.push(makeItem('repair_kit', 0, rng)); if (rng() < 0.4) items.push(makeItem('masters_repair_kit', 0, rng)); }
   return items;
 }
 
@@ -3360,7 +3466,7 @@ function buildSettlement(chunk, cx, cy, seedVal) {
     for (let i = 0; i < hostileCount; i++) {
       let gx, gy, t; let tries = 0;
       do { gx = randInt(rng, margin, CH-margin-1); gy = randInt(rng, margin, CH-margin-1); t = chunk.tiles[gy][gx]; tries++; } while ((!t.walkable || t.building !== null) && tries < 30);
-      const m = makeMonster(choice(rng, flavor.hostileMix), chunk.cx*CH+gx, chunk.cy*CH+gy, 1, rng);
+      const m = makeMonster(choice(rng, flavor.hostileMix), chunk.cx*CH+gx, chunk.cy*CH+gy, overworldDangerScale(chunk.cx, chunk.cy), rng);
       chunk.monsters.push(m);
     }
   }
@@ -3426,7 +3532,7 @@ function placePOI(chunk, cx, cy, rng) {
         const ox = lx + randInt(rng,-2,2), oy = ly + randInt(rng,-2,2);
         if (ox<0||oy<0||ox>=CH||oy>=CH) continue;
         if (!chunk.tiles[oy][ox].walkable) continue;
-        chunk.monsters.push(makeMonster(spec.id, cx*CH+ox, cy*CH+oy, 1, rng));
+        chunk.monsters.push(makeMonster(spec.id, cx*CH+ox, cy*CH+oy, overworldDangerScale(cx, cy), rng));
       }
     }
   }
@@ -3440,7 +3546,11 @@ function placePOI(chunk, cx, cy, rng) {
     chunk.tiles[ly][lx].items.push(chest);
   }
   if (poiType.lootItems) {
-    const baseIds = ITEM_BASES.filter(b => b.type !== 'misc' && b.type !== 'chest' && b.type !== 'corpse').map(b => b.id);
+    const baseIds = ITEM_BASES.filter(b => {
+      if (b.type === 'misc' || b.type === 'chest' || b.type === 'corpse') return false;
+      if ((b.type === 'weapon' || b.type === 'armor') && (b.valueTier || 0) > 2) return false;
+      return true;
+    }).map(b => b.id);
     for (let i = 0; i < poiType.lootItems; i++) {
       const ox = lx + randInt(rng,-2,2), oy = ly + randInt(rng,-2,2);
       if (ox<0||oy<0||ox>=CH||oy>=CH || !chunk.tiles[oy][ox].walkable) continue;
@@ -3463,10 +3573,12 @@ function maybeSpawnOverworldBoss(chunk, cx, cy, centerBiome, rng) {
   const t = chunk.tiles[ly][lx];
   if (!t.walkable) return false;
   const m = makeMonster('rabbit', 0, 0, 1, rng); // placeholder to reuse makeMonster's uid/shape, overwritten below
+  const bScale = overworldDangerScale(cx, cy);
   Object.assign(m, {
     monsterId: bossDef.id, name: bossDef.name, x: cx*CH+lx, y: cy*CH+ly,
-    hp: bossDef.hp, maxHp: bossDef.hp, str: bossDef.str, dex: bossDef.dex, atk: bossDef.atk.slice(),
-    armor: bossDef.armor, glyph: bossDef.glyph, color: bossDef.color, xp: bossDef.xp,
+    hp: Math.round(bossDef.hp * bScale), maxHp: Math.round(bossDef.hp * bScale), str: Math.round(bossDef.str * bScale), dex: bossDef.dex,
+    atk: [Math.round(bossDef.atk[0]*bScale), Math.round(bossDef.atk[1]*bScale)],
+    armor: bossDef.armor, glyph: bossDef.glyph, color: bossDef.color, xp: Math.round(bossDef.xp * bScale),
     behavior: bossDef.behavior, boss: true, breathWeapon: bossDef.breathWeapon || null,
     wanderRadius: 14,
   });
@@ -3479,6 +3591,10 @@ let canvas, ctx;
 let player, gameState, dialogueNPC, dialogueOptions, tradeMode, invSelected;
 let turnCount = 0;
 let logMessages = [];
+// ---- v3: death log/death screen support -- tracks what most recently hurt the player so a
+// non-combat death (poison, fire, falling, drowning, a trap) still gets an accurate cause on the
+// death screen instead of just "unknown causes". doAttack() sets this directly for combat deaths.
+let lastDamageSource = 'unknown causes';
 
 
 function log(msg) {
@@ -3641,17 +3757,21 @@ function triggerTrapAt(t, x, y) {
   if (kind === 'dart') {
     const dmg = randInt(Math.random, 3, 8);
     player.hp -= dmg;
+    lastDamageSource = 'a dart trap';
     log(`A dart trap fires from the wall! You take ${dmg} damage.`);
   } else if (kind === 'spike') {
     const dmg = randInt(Math.random, 8, 16);
     player.hp -= dmg;
+    lastDamageSource = 'a spike trap';
     if (!(getBuff('resistpoison') > 0)) player.statusPoison = (player.statusPoison||0) + 2;
     log(`Rusty spikes punch up through the floor! You take ${dmg} damage and feel a festering sting.`);
   } else if (kind === 'fire') {
     log('A fire trap ignites around you!');
+    lastDamageSource = 'a fire trap';
     igniteArea(x, y, 2);
   } else if (kind === 'gas') {
     log('A gas trap hisses open, filling the area with fumes!');
+    lastDamageSource = 'a gas trap';
     gasArea(x, y, 2, 7, 4, 'poison');
   } else if (kind === 'alarm') {
     log('An alarm rune flares — you hear things stirring in the dark!');
@@ -3659,6 +3779,7 @@ function triggerTrapAt(t, x, y) {
   } else if (kind === 'floorbreak') {
     const dmg = randInt(Math.random, 6, 14);
     player.hp -= dmg;
+    lastDamageSource = 'a collapsing floor';
     log(`The floor gives way beneath you! You fall and take ${dmg} damage.`);
     t.feature = 'brokenfloor'; t.glyph = ':'; t.color = '#4a3a2a';
   }
@@ -3677,6 +3798,7 @@ function processTerrainEffects() {
         const dmg = randInt(Math.random, 3, 7);
         occupant.hp -= dmg;
         log(`${occupant === player ? 'You are' : occupant.name + ' is'} burned by the flames (${dmg}).`);
+        if (occupant === player) { wearRandomArmorPiece(1); lastDamageSource = 'fire'; }
         if (occupant.hp <= 0) onDeath(occupant, null);
       }
       if (Math.random() < 0.35) {
@@ -3705,6 +3827,7 @@ function processTerrainEffects() {
       if (occupant && occupant.alive !== false) {
         const msg = affectEntityWithGas(occupant, t.gasKind, t.gasPower || 3);
         if (msg) log(msg);
+        if (occupant === player) lastDamageSource = (t.gasKind || 'toxic') + ' gas';
         if (occupant.hp <= 0) onDeath(occupant, null);
       }
       // A gas cloud billows outward while it's fresh (high remaining turns/power), then, as it
@@ -3813,10 +3936,59 @@ function effDex(e) {
   return d;
 }
 
+// ---- v3 balance pass: gear STR requirements ----
+// Every weapon and (now) every piece of body/head/feet/gloves/offhand armor carries a STR
+// requirement. Nothing is ever hard-blocked from being equipped -- the game stays sandboxy --
+// but being under-strength for what you're wearing/wielding has real, felt costs: a wizard in
+// full plate fights clumsily and tires fast; a low-STR duelist swinging a greatsword whiffs and
+// undersells its damage. See doAttack() (to-hit/damage) and processEntityStatus()/regenPools()
+// (armor stamina drain) for where these get applied.
+function weaponStrDeficit() {
+  const w = player.equipment.hand;
+  if (!w || !w.str) return 0;
+  return Math.max(0, w.str - effStr(player));
+}
+function armorStrDeficit() {
+  let total = 0;
+  for (const slot of ARMOR_SLOTS) {
+    const it = player.equipment[slot];
+    if (it && it.str) total += Math.max(0, it.str - effStr(player));
+  }
+  return total;
+}
+
+// ---- v3 balance pass: durability ----
+// Ordinary attacks never touch durability -- see doAttack() below, which only calls wearItem()
+// on crits, on defenders eating a heavy hit, and via the `corrosive`-flagged monster path. The
+// intent (per design note): plain fighting should never feel like a maintenance chore, but going
+// all-out (crits, techniques, tanking big hits) or fighting something nasty (acid, fire) should.
+const ARMOR_SLOTS = ['body','head','feet','gloves','offhand'];
+function wearItem(it, amount) {
+  if (!it || it.maxDurability === undefined || it.maxDurability === Infinity || amount <= 0) return;
+  it.durability = Math.max(0, it.durability - amount);
+  if (it.durability <= 0 && !it.broken) {
+    it.broken = true;
+    log(`${it.name} has broken from the strain! It'll perform poorly until repaired.`);
+    Sound.play('miss');
+  }
+}
+function wearRandomArmorPiece(amount) {
+  const equipped = ARMOR_SLOTS.map(s => player.equipment[s]).filter(it => it && it.maxDurability !== undefined && it.maxDurability !== Infinity);
+  if (!equipped.length) return;
+  wearItem(choice(Math.random, equipped), amount);
+}
+function repairItem(it, amount) {
+  if (!it || it.maxDurability === undefined) return false;
+  it.durability = Math.min(it.maxDurability, it.durability + amount);
+  if (it.durability > 0) it.broken = false;
+  return true;
+}
 
 // ---------------- combat ----------------
 function rollHit(att, def) {
   let chance = 0.6 + (effDex(att) - effDex(def)) * 0.025;
+  if (att === player) chance -= weaponStrDeficit() * 0.02;
+  if (def === player) chance += armorStrDeficit() * 0.015; // over-encumbered defenders are easier to hit
   chance = Math.max(0.1, Math.min(0.95, chance));
   return Math.random() < chance;
 }
@@ -3899,7 +4071,12 @@ function equipItem(it) {
   applyStatBonuses(it);
   player.inventory = player.inventory.filter(i => i.uid !== it.uid);
   Sound.play('equip');
-  log(`You equip ${it.name}.`);
+  if (it.str && effStr(player) < it.str) {
+    log(`You equip ${it.name}, but it's heavier than you can comfortably handle (needs ${it.str} STR) — expect worse accuracy${it.type==='weapon'?' and damage':', slower stamina recovery, and an easier target on your back'} until you're stronger.`);
+  } else {
+    log(`You equip ${it.name}.`);
+  }
+  if (it.broken) log(`${it.name} is broken and needs repair before it will perform properly.`);
   updateSidebar();
 }
 function unequipSlot(slot) {
@@ -4132,10 +4309,27 @@ function openTrade(npc) {
   Sound.play('uiOpen');
   renderTrade();
 }
+// ---- v3: blacksmiths (and cybersmiths, for wired-in armor) fully repair your equipped gear for
+// a gold fee scaled to how much damage there is to undo. This is the reliable, always-available
+// repair path; repair kits and Mending-type spells/talents are the field-expedient alternative.
+function repairAtBlacksmith(npc) {
+  const equipped = Object.values(player.equipment).filter(eq => eq && eq.maxDurability !== undefined && eq.maxDurability !== Infinity && eq.durability < eq.maxDurability);
+  if (!equipped.length) { log('Everything you have equipped is already in good repair.'); return; }
+  const totalMissing = equipped.reduce((s, eq) => s + (eq.maxDurability - eq.durability), 0);
+  const cost = Math.max(5, Math.round(totalMissing * 1.5));
+  if (player.gold < cost) { Sound.play('uiError'); log(`Repairs would cost ${cost}g — you can't afford that right now.`); return; }
+  player.gold -= cost;
+  equipped.forEach(eq => repairItem(eq, eq.maxDurability));
+  Sound.play('tradeBuy');
+  log(`${npc.name} repairs all your equipped gear to full for ${cost}g.`);
+  updateSidebar();
+  renderTrade();
+}
 function renderTrade() {
   const npc = dialogueNPC;
   const list = tradeMode === 'buy' ? npc.shop : player.inventory.filter(i => i.type !== 'misc');
   let html = `<div class="npcline">Your gold: ${player.gold} | [Tab] switch ${tradeMode === 'buy' ? 'to sell' : 'to buy'}</div>`;
+  if (npc.roleId === 'blacksmith' || npc.roleId === 'cybersmith') html += `<div class="npcline dim">[R] Repair all equipped gear</div>`;
   html += `<div class="trade-col-title">${tradeMode === 'buy' ? npc.name + "'s wares (buy):" : 'Your items (sell):'}</div>`;
   list.forEach((it, i) => {
     const letter = String.fromCharCode(97 + i);
@@ -4706,6 +4900,7 @@ function chasmFall() {
   Sound.play('playerHurt');
   log(`You leap into the chasm and plummet to depth ${nd}/${dg.maxDepth}, landing hard. You take ${dmg} damage.`);
   player.hp -= dmg;
+  lastDamageSource = 'a fall into the chasm';
   relocateAllies();
   if (player.hp <= 0) { onDeath(player, null); return; }
   markSeen(); render();
@@ -4786,6 +4981,13 @@ function filteredInventory() {
   if (player.invFilter === 'all') return player.inventory.filter(i=>i.type!=='corpse');
   return player.inventory.filter(i => i.type === player.invFilter);
 }
+function durabilityTag(it) {
+  if (!it || it.maxDurability === undefined) return '';
+  if (it.maxDurability === Infinity) return ` <span style="color:#e0c34a">[indestructible]</span>`;
+  const pct = it.durability / it.maxDurability;
+  const color = it.broken ? '#e05a4a' : pct < 0.34 ? '#e0a03a' : pct < 0.67 ? '#d8cf8a' : '#8ac93a';
+  return ` <span style="color:${color}">[${it.durability}/${it.maxDurability}${it.broken ? ' BROKEN' : ''}]</span>`;
+}
 function renderInventory() {
   const eq = player.equipment;
   let html = '<div class="trade-col-title">Equipped</div>';
@@ -4795,7 +4997,8 @@ function renderInventory() {
     if (!it) return;
     anyEq = true;
     const letter = String.fromCharCode(65 + i);
-    html += `<div class="modal-opt" onclick="simulateKey('${letter}')" style="color:${it.color}">[${letter}] ${it.glyph} ${it.name} <span class="dim">(${slot})</span></div>`;
+    const durTag = durabilityTag(it);
+    html += `<div class="modal-opt" onclick="simulateKey('${letter}')" style="color:${it.color}">[${letter}] ${it.glyph} ${it.name} <span class="dim">(${slot})</span>${durTag}</div>`;
   });
   if (!anyEq) html += `<div class="npcline dim">(nothing equipped)</div>`;
 
@@ -4810,7 +5013,7 @@ function renderInventory() {
     const letter = String.fromCharCode(97 + i);
     const tag = it.type === 'weapon' || it.type === 'armor' ? ` <span class="dim">[${it.slot}]</span>` : '';
     const amt = it.amount && it.amount > 1 ? ` x${it.amount}` : '';
-    html += `<div class="modal-opt" onclick="simulateKey('${letter}')"><span style="color:${it.color}">[${letter}] ${it.glyph} ${it.name}${amt}</span>${tag} <span class="dim">(${it.value}g)</span></div>`;
+    html += `<div class="modal-opt" onclick="simulateKey('${letter}')"><span style="color:${it.color}">[${letter}] ${it.glyph} ${it.name}${amt}</span>${tag}${durabilityTag(it)} <span class="dim">(${it.value}g)</span></div>`;
   });
   html += `<div style="margin-top:6px" class="dim">Page ${player.invPage+1}/${totalPages} &nbsp; <span style="cursor:pointer;color:var(--amber)" onclick="simulateKey('[')">[prev]</span> <span style="cursor:pointer;color:var(--amber)" onclick="simulateKey(']')">[next]</span></div>`;
   html += `<div class="npcline" style="margin-top:8px">Gold: ${player.gold}</div>`;
@@ -5488,7 +5691,12 @@ function openChest(chestItem) {
   player.inventory = player.inventory.filter(i => i.uid !== chestItem.uid);
   const tier = chestItem.tier || 0;
   const n = randInt(Math.random, 2, 4);
-  const baseIds = ITEM_BASES.filter(b => b.type !== 'misc' && b.type !== 'chest' && b.type !== 'corpse' && b.type !== 'material').map(b => b.id);
+  const maxValueTier = Math.min(4, tier + 1);
+  const baseIds = ITEM_BASES.filter(b => {
+    if (b.type === 'misc' || b.type === 'chest' || b.type === 'corpse' || b.type === 'material') return false;
+    if ((b.type === 'weapon' || b.type === 'armor') && (b.valueTier || 0) > maxValueTier) return false;
+    return true;
+  }).map(b => b.id);
   const gotten = [];
   for (let i = 0; i < n; i++) { const it = makeItem(choice(Math.random, baseIds), tier, Math.random); player.inventory.push(it); gotten.push(it.name); }
   const gold = randInt(Math.random, 10, 30) * (tier+1);
@@ -5499,6 +5707,36 @@ function openChest(chestItem) {
   updateSidebar();
 }
 
+// ---- v3 balance pass: loot gated by what actually killed you dropping it ----
+// Previously any monster (a level-1 bandit included) could drop literally any item in the game,
+// including top-tier "of Eternity"-class gear, because dropLoot() always rolled from the full
+// ITEM_BASES pool at a flat rarity. monsterPowerTier() gives every monster a 0-4 threat rating
+// (dungeon tier, boss status, and XP value all feed in), and lootRarityFor()/lootBaseIdsFor() use
+// that rating to cap both how good a dropped affix roll can be and how expensive the base item
+// itself is allowed to be. A random overworld bandit is capped at tier 1 (a decent, not-legendary
+// find); only dungeon-tier threats and bosses can produce anything higher.
+function monsterPowerTier(def) {
+  const base = MONSTER_BASES[def.monsterId] || {};
+  let t = base.dtier || 0;
+  if ((def.xp || 0) >= 60) t = Math.max(t, 2);
+  if ((def.xp || 0) >= 150) t = Math.max(t, 3);
+  if (def.boss) t = base.bossTier === 'rare' ? 4 : Math.max(t, 3);
+  return Math.max(0, Math.min(4, t));
+}
+function lootRarityFor(def) {
+  const t = monsterPowerTier(def);
+  // a small chance to roll one tier above station keeps drops from feeling deterministic,
+  // without ever letting trash mobs hand out endgame-quality affixes.
+  return Math.min(4, t + (Math.random() < 0.12 ? 1 : 0));
+}
+function lootBaseIdsFor(def) {
+  const maxValueTier = Math.min(4, monsterPowerTier(def) + 1);
+  return ITEM_BASES.filter(b => {
+    if (b.type === 'misc' || b.type === 'chest' || b.type === 'corpse' || b.type === 'material') return false;
+    if ((b.type === 'weapon' || b.type === 'armor') && (b.valueTier || 0) > maxValueTier) return false;
+    return true;
+  }).map(b => b.id);
+}
 // ---- loot v4: tome drops from monsters/bosses added ----
 function dropLoot(def) {
   const items = [];
@@ -5506,9 +5744,10 @@ function dropLoot(def) {
   if (def.guaranteedDrops && def.guaranteedDrops.length) items.push(...def.guaranteedDrops);
   if (def.kind === 'monster' || def.kind === 'ally') {
     const base = MONSTER_BASES[def.monsterId];
+    const pTier = monsterPowerTier(def);
     if (base && base.loot) items.push(...rollLoot(base.loot, Math.random));
     if (Math.random() < 0.5 || def.dropGold) { const g = makeItem('gold', 0, Math.random); g.amount = Math.round(randInt(Math.random, 1, 10) * (def.boss ? 12 : 1) * goldMult); items.push(g); }
-    if (Math.random() < 0.25 || def.boss) { const baseIds = ITEM_BASES.filter(b => b.type !== 'misc' && b.type !== 'chest' && b.type !== 'corpse' && b.type !== 'material').map(b => b.id); items.push(makeItem(choice(Math.random, baseIds), def.boss ? 3 : 0, Math.random)); }
+    if (Math.random() < (0.10 + pTier * 0.05) || def.boss) { const baseIds = lootBaseIdsFor(def); items.push(makeItem(choice(Math.random, baseIds), def.boss ? Math.max(3, lootRarityFor(def)) : lootRarityFor(def), Math.random)); }
     if (def.boss && Math.random() < 0.4) items.push(makeItem('chest', 0, Math.random));
     if (def.boss && Math.random() < 0.5) items.push(makeTome(randInt(Math.random,2,3), Math.random));
     else if (Math.random() < 0.03) items.push(makeTome(randInt(Math.random,0,1), Math.random));
@@ -5535,7 +5774,13 @@ function onDeath(def, killer) {
       updateSidebar();
       return;
     }
-    def.alive = false; def.hp = 0; Sound.play('playerDeath'); gameOver(); return;
+    def.alive = false; def.hp = 0; Sound.play('playerDeath');
+    // ---- v3: death screen support -- killer (the entity that landed the final blow, if any) wins
+    // out over the more general lastDamageSource tracker, since it's the most specific answer.
+    player.deathCause = killer ? (killer.name || 'something') : lastDamageSource;
+    player.deathLog = logMessages.slice(-60);
+    player.deathTurn = turnCount;
+    gameOver(); return;
   }
   def.alive = false; def.hp = 0;
   Sound.play(def.kind === 'npc' ? 'npcDeath' : 'monsterDeath');
@@ -6254,7 +6499,12 @@ function paySpellCost(ability) {
 // ---- extended effect application: confuse status, blinklike (shared by phantom step / time skip /
 // cyber blink implants / mutation warp step), and environment destruction on fire-flagged abilities ----
 function applyEffectToTarget(spell, t) {
-  const dmgMult = 1 + (player.spellDmgBonus || 0) + (abilityPoolOf(spell.id) === 'technique' ? (player.techniqueDmgBonus || 0) : 0) + (abilityPoolOf(spell.id) === 'mutation' ? (player.mutationDmgBonus ? player.mutationDmgBonus/20 : 0) + (player.eldritchDmgBonus || 0) : 0);
+  const dmgMult = (1 + (player.spellDmgBonus || 0) + (abilityPoolOf(spell.id) === 'technique' ? (player.techniqueDmgBonus || 0) : 0) + (abilityPoolOf(spell.id) === 'mutation' ? (player.mutationDmgBonus ? player.mutationDmgBonus/20 : 0) + (player.eldritchDmgBonus || 0) : 0)) * abilityPenaltyFactor(abilityRequirementDeficit(spell));
+  // martial techniques push the wielded weapon far past normal use -- unlike plain attacks,
+  // these do chip away at durability (see doAttack() for the equivalent crit-only weapon wear).
+  if (abilityPoolOf(spell.id) === 'technique' && ['damage','execute','smite','drain'].includes(spell.type) && player.equipment.hand) {
+    wearItem(player.equipment.hand, 1);
+  }
   if (spell.type === 'lifetap') {
     const dmg = Math.round(randInt(Math.random, spell.power[0], spell.power[1]) * dmgMult);
     t.hp -= dmg;
@@ -6311,6 +6561,19 @@ function applyEffectToTarget(spell, t) {
 function castSpell(spellId) {
   const spell = findAbilityById(spellId);
   if (!spell || !isAbilityKnown(spellId)) { log("You don't know that ability."); return; }
+  // ---- v3: soft stat requirement check (spells need INT, weapon-school techniques need STR/DEX) ----
+  const deficit = abilityRequirementDeficit(spell);
+  if (deficit > 0) {
+    const failChance = Math.min(0.5, deficit * 0.04);
+    if (Math.random() < failChance) {
+      const statName = spell.reqStat.toUpperCase();
+      log(`You don't have the ${statName} for ${spell.name} yet and it fizzles in your hands.`);
+      Sound.play('miss');
+      paySpellCost(spell); // the attempt still costs its resource even though it fizzled
+      endTurn();
+      return;
+    }
+  }
   Sound.castSpell(spell);
 
   if (spell.type === 'lifetap') {
@@ -6382,6 +6645,16 @@ function castSpell(spellId) {
     if (!paySpellCost(spell)) { log('Not enough mana.'); return; }
     player.statusPoison = 0; player.statusFear = 0; player.statusConfuse = 0;
     log('You feel cleansed of all affliction.');
+    endTurn(); return;
+  }
+  if (spell.type === 'repair') {
+    const candidates = Object.values(player.equipment).filter(eq => eq && eq.maxDurability !== undefined && eq.maxDurability !== Infinity && eq.durability < eq.maxDurability);
+    if (!candidates.length) { log('Everything you have equipped is already in good repair.'); return; }
+    if (!paySpellCost(spell)) { log(spell.resource === 'stamina' ? 'Not enough stamina.' : 'Not enough mana.'); return; }
+    candidates.sort((a,b) => (a.durability/a.maxDurability) - (b.durability/b.maxDurability));
+    const target = candidates[0];
+    repairItem(target, spell.power);
+    log(`${spell.name} mends ${target.name} (${target.durability}/${target.maxDurability} durability).`);
     endTurn(); return;
   }
   if (spell.type === 'purify') {
@@ -6624,10 +6897,14 @@ function resolveSpellAtTile(spell, wx, wy) {
 function newPlayer() {
   return {
     x: 0, y: 0, mode: 'overworld', dungeonId: null, dungeonDepth: 0, overworldReturn: null,
-    str: 10, dex: 10, int: 10, con: 10, wis: 10,
+    // v3 balance pass: base stats dropped from a flat 10 to 8. Combined with recalcVitalsFromStats()
+    // (called once, right after archetype/custom creation finishes picking final stats) this is what
+    // actually differentiates classes at level 1 -- HP now scales off CON and MP off INT instead of
+    // every archetype sharing the same flat 26/16 regardless of how tanky or squishy it's meant to be.
+    str: 8, dex: 8, int: 8, con: 8, wis: 8,
     level: 1, xp: 0, xpNext: 30, statPoints: 0, talentPoints: 0, talents: {},
-    maxHp: 26, hp: 26, maxMp: 16, mp: 16, gold: 40,
-    maxStamina: 100, stamina: 100, secondWindMax: 0, secondWindCharges: 0,
+    maxHp: 28, hp: 28, maxMp: 16, mp: 16, gold: 40,
+    maxStamina: 90, stamina: 90, secondWindMax: 0, secondWindCharges: 0,
     maxCharge: 60, charge: 60, corruption: 0,
     equipment: { hand: null, offhand: null, body: null, head: null, feet: null, ring: null, amulet: null, gloves: null, cloak: null },
     inventory: [],
@@ -6640,12 +6917,27 @@ function newPlayer() {
     knownSettlements: [], knownDungeons: [], customNames: {},
   };
 }
+// derives max HP from CON and max MP from INT; called exactly once, right after an archetype or a
+// finished custom build has set the character's final starting stats, so a warrior's higher CON and
+// a mage's higher INT actually produce a tankier warrior and a mana-rich mage from turn one instead
+// of every class sharing an identical flat HP/MP pool.
+function recalcVitalsFromStats() {
+  const newMaxHp = Math.max(10, Math.round(10 + player.con * 2.2));
+  const newMaxMp = Math.max(5, Math.round(2 + player.int * 1.8));
+  const hpWasFull = player.hp >= player.maxHp, mpWasFull = player.mp >= player.maxMp;
+  player.maxHp = newMaxHp; player.maxMp = newMaxMp;
+  player.hp = hpWasFull ? player.maxHp : Math.min(player.hp, player.maxHp);
+  player.mp = mpWasFull ? player.maxMp : Math.min(player.mp, player.maxMp);
+}
 
 // ---- combat v6: cybernetic/mutation armor & damage bonuses ----
 function getArmorOf(e) {
   if (e === player) {
     let a = getBuff('armor') + (player.talentArmor || 0) + (player.cyberArmor || 0) + (player.mutationArmor || 0);
-    for (const slot in player.equipment) { const it = player.equipment[slot]; if (it) a += it.armor || 0; }
+    for (const slot in player.equipment) {
+      const it = player.equipment[slot];
+      if (it) a += it.broken ? Math.round((it.armor || 0) * 0.25) : (it.armor || 0);
+    }
     return a;
   }
   return e.armor || 0;
@@ -6656,7 +6948,7 @@ function doAttack(att, def) {
   const dmgRange = weapon ? weapon.dmg : (att.atk || [1, 3]);
   const attName = isPlayer ? 'You' : att.name;
   const defName = def === player ? 'you' : def.name;
-  const dodgeChance = (player.dodgeChance || 0) + getBuff('evasion');
+  const dodgeChance = (player.dodgeChance || 0) + getBuff('evasion') - (def === player ? armorStrDeficit() * 0.01 : 0);
   if (def === player && dodgeChance > 0 && Math.random() < dodgeChance) { log(`You nimbly dodge ${attName === 'You' ? 'the' : att.name + "'s"} attack!`); return; }
   if (!rollHit(att, def)) {
     Sound.play(isPlayer ? 'miss' : 'enemyMiss');
@@ -6665,6 +6957,8 @@ function doAttack(att, def) {
     return;
   }
   let dmg = randInt(Math.random, dmgRange[0], dmgRange[1]) + Math.floor(effStr(att) / 4);
+  if (isPlayer && weapon) dmg = Math.round(dmg * abilityPenaltyFactor(weaponStrDeficit()));
+  if (isPlayer && weapon && weapon.broken) dmg = Math.round(dmg * 0.35);
   if (isPlayer) {
     dmg += (player.cyberDmgBonus || 0);
     if (player.mutationFrost) dmg += randInt(Math.random, 0, player.mutationFrost);
@@ -6691,6 +6985,14 @@ function doAttack(att, def) {
   if (Math.random() < critChance) { dmg *= (2 + (isPlayer ? (player.critDmgBonus || 0) : 0)); crit = true; }
   dmg = Math.max(1, Math.round(dmg));
   def.hp -= dmg;
+  // ---- v3 durability wear: only on crits (weapon under exceptional strain) and heavy hits
+  // taken (armor absorbing serious punishment), plus corrosive attackers -- never on routine hits.
+  if (isPlayer && crit && weapon) wearItem(weapon, 1);
+  if (def === player) {
+    lastDamageSource = att.name || 'an attacker';
+    if (dmg >= Math.round((player.maxHp || 30) * 0.15)) wearRandomArmorPiece(1);
+    if (!isPlayer && att.corrosive) wearRandomArmorPiece(2);
+  }
   if (settings.showDamageNumbers) spawnFloatingText(def.x, def.y, String(dmg), crit ? '#ffdd55' : (def === player ? '#ff6a5a' : '#ffffff'));
   if (def === player) Sound.play('playerHurt'); else if (isPlayer) Sound.play(crit ? 'critHit' : 'hit'); else Sound.play('enemyHit');
   log(`${attName} hit${isPlayer ? '' : 's'} ${defName} for ${dmg}${crit ? ' (critical!)' : ''}.`);
@@ -6720,7 +7022,7 @@ function processEntityStatus(e) {
       const d = Math.min(e.statusPoison, 4);
       e.hp -= d;
       e.statusPoison = Math.max(0, e.statusPoison - 1);
-      if (e === player) log(`Poison courses through you (${d} damage).`);
+      if (e === player) { log(`Poison courses through you (${d} damage).`); lastDamageSource = 'poison'; }
       if (e.hp <= 0) onDeath(e, null);
     }
   }
@@ -6735,6 +7037,7 @@ function performBreathWeapon(m) {
   if (m.breathWeapon === 'fire' && getBuff('resistfire') > 0) dmg = Math.round(dmg * 0.4);
   if (m.breathWeapon === 'frost' && getBuff('resistfrost') > 0) dmg = Math.round(dmg * 0.4);
   player.hp -= dmg;
+  lastDamageSource = `${m.name}'s ${m.breathWeapon} breath`;
   Sound.play('breathWeapon');
   log(`${m.name} unleashes a devastating blast of ${m.breathWeapon}! You take ${dmg} damage.`);
   if (m.breathWeapon === 'fire') {
@@ -7007,14 +7310,20 @@ function generateChunk(cx, cy) {
       const b = BIOMES[t.biome];
       if (!b.encounter.length) continue;
       const mid = weightedChoice(rng, b.encounter);
-      chunk.monsters.push(makeMonster(mid, cx * CH + lx, cy * CH + ly, 1, rng));
+      chunk.monsters.push(makeMonster(mid, cx * CH + lx, cy * CH + ly, overworldDangerScale(cx, cy), rng));
     }
     const itemChance = rng();
     if (itemChance < 0.10) {
       const lx = randInt(rng, 1, CH - 2), ly = randInt(rng, 1, CH - 2);
       const t = tiles[ly][lx];
       if (t.walkable) {
-        const baseIds = ITEM_BASES.filter(b => b.type !== 'misc' && b.type !== 'chest' && b.type !== 'corpse').map(b => b.id);
+        // unguarded overworld scatter finds (dropped by nobody in particular) stay modest --
+        // this is what previously let a "Corrupted Plate of Eternity" turn up sitting in a field.
+        const baseIds = ITEM_BASES.filter(b => {
+          if (b.type === 'misc' || b.type === 'chest' || b.type === 'corpse') return false;
+          if ((b.type === 'weapon' || b.type === 'armor') && (b.valueTier || 0) > 1) return false;
+          return true;
+        }).map(b => b.id);
         const it = makeItem(choice(rng, baseIds), 0, rng);
         t.items.push(it);
       }
@@ -7098,10 +7407,15 @@ function generateDungeonLevel(theme, depth, maxDepth, variantId) {
     }
   }
   const itemCount = 3 + Math.floor(depth * 1.2);
-  const baseIds = ITEM_BASES.filter(b => b.type !== 'misc' && b.type !== 'chest' && b.type !== 'corpse').map(b => b.id);
   for (let i = 0; i < itemCount; i++) {
     const c = choice(rng, floors);
     const rarity = Math.max(0, Math.min(4, Math.round(Math.floor(depth / 3) * variant.lootMod)));
+    const maxValueTier = Math.min(4, rarity + 1);
+    const baseIds = ITEM_BASES.filter(b => {
+      if (b.type === 'misc' || b.type === 'chest' || b.type === 'corpse') return false;
+      if ((b.type === 'weapon' || b.type === 'armor') && (b.valueTier || 0) > maxValueTier) return false;
+      return true;
+    }).map(b => b.id);
     const it = makeItem(choice(rng, baseIds), rarity, rng);
     level.items.push({ x: c.x, y: c.y, item: it });
   }
@@ -7610,6 +7924,7 @@ function movePlayer(dx, dy) {
       Sound.play('splash');
       log("You're too exhausted to swim properly! You flounder and take damage.");
       player.hp -= 3;
+      lastDamageSource = 'drowning';
       if (player.hp <= 0) { onDeath(player, null); return; }
       endTurn(); return;
     }
@@ -7694,11 +8009,21 @@ function endTurn() {
   const playerInWater = curT && (curT.feature === 'water' || curT.biome === 'ocean') && !curIsDungeon();
   if (!playerInWater) {
     const staminaRegen = player.staminaRegenBonus ? 6 : 3;
-    player.stamina = Math.min(player.maxStamina || 100, (player.stamina || 0) + staminaRegen);
+    // wearing armor heavier than your STR supports means you're spending some of every turn's
+    // recovery just fighting the weight of your own gear instead of actually resting.
+    const encumbranceDrag = Math.min(staminaRegen, Math.ceil(armorStrDeficit() * 0.4));
+    player.stamina = Math.min(player.maxStamina || 100, (player.stamina || 0) + Math.max(0, staminaRegen - encumbranceDrag));
   }
   player.charge = Math.min(player.maxCharge || 60, (player.charge || 0) + 3);
   const regenInterval = player.regenBonus ? 5 : 10;
   if (turnCount % regenInterval === 0) { player.hp = Math.min(player.maxHp, player.hp + 1); player.mp = Math.min(player.maxMp, player.mp + 1); }
+  // ---- v3: passive auto-repair from talents/cybernetics/mutations (Blacksmith's Touch, Nanite
+  // Repair Mesh, Flesh-Melding Symbiosis) -- slow, steady, and stacks if you have more than one ----
+  if (player.autoRepairRate > 0 && turnCount % 20 === 0) {
+    const worst = Object.values(player.equipment).filter(eq => eq && eq.maxDurability !== undefined && eq.maxDurability !== Infinity && eq.durability < eq.maxDurability)
+      .sort((a,b) => (a.durability/a.maxDurability) - (b.durability/b.maxDurability))[0];
+    if (worst) repairItem(worst, player.autoRepairRate);
+  }
   if (turnCount % 300 === 0) decayBounties();
   if (settings.autosaveEnabled && turnCount % settings.autosaveInterval === 0) saveGame(true);
   checkKingdomDiscovery();
@@ -7971,6 +8296,16 @@ function useItem(it) {
       log(removed ? `The curse lifts from your gear! (${removed} item${removed>1?'s':''} cleansed)` : 'You feel no curse upon you.');
       break;
     }
+    case 'repair': {
+      // repairs whichever equipped weapon/armor piece needs it most (lowest % durability first)
+      const candidates = Object.values(player.equipment).filter(eq => eq && eq.maxDurability !== undefined && eq.maxDurability !== Infinity && eq.durability < eq.maxDurability);
+      if (!candidates.length) { log('Nothing you have equipped needs repair right now.'); consumed = false; break; }
+      candidates.sort((a,b) => (a.durability/a.maxDurability) - (b.durability/b.maxDurability));
+      const target = candidates[0];
+      repairItem(target, it.power || 25);
+      log(`You repair ${target.name} (${target.durability}/${target.maxDurability} durability).`);
+      break;
+    }
     case 'scrollsummon': { const a = spawnAlly(it.summonId, it.duration || 40); if (a) log(`You conjure ${a.name} to fight at your side!`); break; }
     case 'foodbuff': {
       player.hp = Math.min(player.maxHp, player.hp + (it.power || 5));
@@ -8100,14 +8435,19 @@ function describeItem(it) {
     if (it.poisonDmg) lines.push(`+${it.poisonDmg} poison on hit`);
     if (it.lifesteal) lines.push(`Drains ${Math.round(it.lifesteal*100)}% of damage dealt as HP`);
     if (it.armorPierce) lines.push(`Pierces ${it.armorPierce} armor`);
+    if (it.str) lines.push(`Requires ${it.str} STR to wield effectively${effStr(player) < it.str ? ' (you fall short — expect reduced accuracy & damage)' : ''}`);
+    if (it.maxDurability !== undefined) lines.push(it.maxDurability === Infinity ? 'Indestructible.' : `Durability: ${it.durability}/${it.maxDurability}${it.broken ? ' — BROKEN, repair to restore full performance' : ''}`);
   } else if (it.type === 'armor') {
     lines.push(`Armor (${it.slot}) — Defense +${it.armor}`);
+    if (it.str) lines.push(`Requires ${it.str} STR to wear comfortably${effStr(player) < it.str ? ' (you fall short — expect worse dodge & stamina recovery)' : ''}`);
+    if (it.maxDurability !== undefined) lines.push(it.maxDurability === Infinity ? 'Indestructible.' : `Durability: ${it.durability}/${it.maxDurability}${it.broken ? ' — BROKEN, repair to restore full protection' : ''}`);
   } else if (it.type === 'consumable' || it.type === 'scroll') {
     const eff = { heal:'Restores HP', mana:'Restores MP', buffstr:'Temporarily boosts Strength', poison:'Poisons you (bad idea to drink!)',
       food:'A simple food ration', identify:'Reveals hidden information', teleport:'Teleports you a great distance',
       scrollfire:'Blasts the nearest foe with fire', buffregen:'Grants regeneration over time', cureposion:'Cures poison',
       throwdmg:'Thrown weapon — damages the nearest foe', escape:'Blinks you away and grants brief invisibility',
       placewaypoint:'Plants a permanent, nameable waystone at your feet, linking it to your travel network',
+      repair:'Repairs whichever equipped weapon/armor piece needs it most',
       recall:'Opens the waystone network from anywhere — even inside a dungeon — consumed once you travel' }[it.effect];
     lines.push(eff || 'A consumable item.');
   } else if (it.type === 'material') {
@@ -8310,6 +8650,13 @@ function importSave() {
 // classes. Every archetype below grants gear + starting abilities that actually match its theme,
 // and none of them silently hand out Magic Missile unless the class is genuinely an arcane caster
 // who picked it. Custom and Random are handled separately in showArchetypePicker/archetypeChoice.
+// v3 balance follow-up: pure spellcaster archetypes (Elementalist, Druid, Necromancer, Blood Mage,
+// Alchemist) previously carried +2/+3 CON bonuses that, combined with the new CON-derived HP
+// formula (see recalcVitalsFromStats), quietly made them as tanky as Warrior/Brawler/Commander --
+// exactly the "casters can tank just as much" complaint this whole pass was meant to fix. Their CON
+// bonuses were removed/reduced and redirected into their actual casting stat or a touch of DEX for
+// kiting, so they land noticeably squishier than melee/hybrid archetypes as intended. Blood Mage
+// keeps a small +1 CON since its own spells spend HP as a resource and needs a little cushion for that.
 const ARCHETYPES = [
   // ---- martial: weapon-school classes ----
   { id:'warrior', name:'Warrior', desc:'A hardened melee fighter, front and center. Strong and tough from the start.',
@@ -8354,7 +8701,7 @@ const ARCHETYPES = [
       player.equipment.hand=makeItem('staff',0,Math.random); player.equipment.body=makeItem('robe',0,Math.random);
       player.knownSpells.push('magicmissile','shield'); } },
   { id:'elementalist', name:'Elementalist', desc:'Hurls fire and ice with equal enthusiasm and very little subtlety.',
-    apply: () => { player.int+=4; player.con+=2; player.gold+=65;
+    apply: () => { player.int+=4; player.dex+=1; player.gold+=65;
       player.equipment.hand=makeItem('wand_fire',0,Math.random); player.equipment.body=makeItem('robe',0,Math.random);
       player.knownSpells.push('firebolt','frostbolt'); } },
   { id:'stormcaller', name:'Stormcaller', desc:'Calls down wind and lightning to scatter foes before they can close in.',
@@ -8375,15 +8722,15 @@ const ARCHETYPES = [
       player.equipment.hand=makeItem('holy_mace',0,Math.random); player.equipment.body=makeItem('chainmail',0,Math.random);
       player.knownSpells.push('smite','purify'); } },
   { id:'druid', name:'Druid', desc:'Speaks for the wild places, calling on thorns, roots, and old green magic.',
-    apply: () => { player.wis+=4; player.con+=2; player.gold+=55;
+    apply: () => { player.wis+=4; player.dex+=1; player.gold+=55;
       player.equipment.hand=makeItem('oak_staff',0,Math.random); player.equipment.body=makeItem('robe',0,Math.random);
       player.knownSpells.push('thornwhip','naturesward'); } },
   { id:'necromancer', name:'Necromancer', desc:'A student of death, commanding the fallen to fight in their own place.',
-    apply: () => { player.int+=4; player.con+=2; player.gold+=70;
+    apply: () => { player.int+=4; player.wis+=1; player.gold+=70;
       player.equipment.hand=makeItem('dagger',0,Math.random); player.equipment.body=makeItem('robe',0,Math.random);
       player.knownSpells.push('summonskeleton','drain'); } },
   { id:'bloodmage', name:'Blood Mage', desc:'Pays for power in their own blood, and it always seems to be worth it.',
-    apply: () => { player.int+=3; player.con+=3; player.gold+=60;
+    apply: () => { player.int+=4; player.con+=1; player.gold+=60;
       player.equipment.hand=makeItem('stiletto',0,Math.random); player.equipment.body=makeItem('robe',0,Math.random);
       player.knownSpells.push('bloodpact','hemorrhage'); } },
   { id:'summoner', name:'Summoner', desc:'Prefers to let something else do the fighting, and calls it out of thin air.',
@@ -8391,7 +8738,7 @@ const ARCHETYPES = [
       player.equipment.hand=makeItem('staff',0,Math.random); player.equipment.body=makeItem('robe',0,Math.random);
       player.knownSpells.push('summonwolf','summonspirit'); } },
   { id:'alchemist', name:'Alchemist', desc:'Turns flasks, gas, and volatile compounds into a surprisingly deep bag of tricks.',
-    apply: () => { player.int+=3; player.con+=2; player.dex+=1; player.gold+=75;
+    apply: () => { player.int+=3; player.dex+=2; player.gold+=75;
       player.equipment.hand=makeItem('dagger',0,Math.random); player.equipment.body=makeItem('robe',0,Math.random);
       player.inventory.push(makeItem('antidote',0,Math.random));
       player.knownSpells.push('alchemistfire','acidflask'); } },
@@ -8587,22 +8934,24 @@ function archetypeChoice(letter) {
   if (letter === '<') { showTitleScreen(); return; }
   resetWorldState();
   if (letter === 'a') { player = newPlayer(); creationDraft = { points: CREATION_POINTS, statAdds:{str:0,dex:0,int:0,con:0,wis:0}, abilities:[], abilityCat:'spells', gold:0, items:[] }; showCreateStats(); return; }
-  if (letter === 'b') { player = newPlayer(); const arch = choice(Math.random, ARCHETYPES); arch.apply(); player.scenario = 'archetype:' + arch.id; log(`*** Random roll: you are a ${arch.name}! ***`); showStartScreen(); return; }
+  if (letter === 'b') { player = newPlayer(); const arch = choice(Math.random, ARCHETYPES); arch.apply(); recalcVitalsFromStats(); player.scenario = 'archetype:' + arch.id; log(`*** Random roll: you are a ${arch.name}! ***`); showStartScreen(); return; }
   const idx = letter.charCodeAt(0) - 97 - 2;
   const arch = ARCHETYPES[idx];
   if (!arch) return;
   player = newPlayer();
   arch.apply();
+  recalcVitalsFromStats();
   player.scenario = 'archetype:' + arch.id;
   showStartScreen();
 }
 function showCreateStats() {
   gameState = 'create_stats';
   const d = creationDraft;
-  let html = `<div class="npcline">Points remaining: ${d.points}</div>`;
+  let html = `<div class="npcline">Points remaining: ${d.points} <span class="dim">(each stat capped at +${CREATION_MAX_STAT_ADD} during creation)</span></div>`;
   const stats = [['str','STR'],['dex','DEX'],['int','INT'],['con','CON'],['wis','WIS']];
   stats.forEach(([k,label], i) => {
-    html += `<div class="modal-opt" onclick="simulateKey('${i+1}')">[${i+1}] ${label}: ${10+d.statAdds[k]} <span class="dim">(+1 for 1 point)</span></div>`;
+    const capped = d.statAdds[k] >= CREATION_MAX_STAT_ADD;
+    html += `<div class="modal-opt" onclick="simulateKey('${i+1}')">[${i+1}] ${label}: ${8+d.statAdds[k]} <span class="dim">(+1 for 1 point${capped?', capped':''})</span></div>`;
   });
   html += `<div class="modal-opt" onclick="simulateKey('<')" style="margin-top:6px">[&lt;] Back: choose a different path</div>`;
   html += `<div class="modal-opt" onclick="simulateKey('Enter')">[Enter] Next: choose starting abilities →</div>`;
@@ -8616,6 +8965,7 @@ function createStatsKey(key) {
   const idx = parseInt(key,10) - 1;
   const k = keys[idx];
   if (!k || d.points <= 0) return;
+  if (d.statAdds[k] >= CREATION_MAX_STAT_ADD) { log(`STR/DEX/INT/CON/WIS are each capped at +${CREATION_MAX_STAT_ADD} during creation — further growth comes from leveling, gear, and talents.`); return; }
   d.statAdds[k]++; d.points--;
   showCreateStats();
 }
@@ -8722,8 +9072,7 @@ function createFinalKey(key) {
 function finishCustomCreation() {
   const d = creationDraft;
   player.str += d.statAdds.str; player.dex += d.statAdds.dex; player.int += d.statAdds.int; player.con += d.statAdds.con; player.wis += d.statAdds.wis;
-  player.maxHp += d.statAdds.con * 3; player.hp = player.maxHp;
-  player.maxMp += d.statAdds.int * 3; player.mp = player.maxMp;
+  recalcVitalsFromStats();
   let maxMutationReq = -1;
   d.abilities.forEach(id => {
     if (SPELLS.some(s => s.id === id)) {
@@ -8755,16 +9104,23 @@ function finishCustomCreation() {
   showStartScreen();
 }
 
-// ---- game over v3: proper menu instead of "press any key" ----
+// ---- game over v4: full death screen -- cause of death + scrollable combat log ----
 function gameOver() {
   gameState = 'gameover';
   player.alive = false;
   Sound.play('playerDeath');
   log('*** YOU HAVE DIED ***');
-  const html = `<div class="npcline">You fell at level ${player.level} on turn ${turnCount}, carrying ${player.gold} gold.</div>
+  const cause = player.deathCause || 'unknown causes';
+  const eq = player.equipment;
+  const equipped = SLOT_ORDER.map(s => eq[s]).filter(Boolean).map(it => it.name).join(', ') || 'nothing';
+  const logHtml = (player.deathLog || []).map(m => `<div>${m}</div>`).join('');
+  const html = `<div class="npcline">You fell to <b>${cause}</b> at level ${player.level} on turn ${player.deathTurn || turnCount}, carrying ${player.gold} gold.</div>
+    <div class="npcline dim">Equipped at death: ${equipped}</div>
+    <div class="trade-col-title" style="margin-top:8px">What happened</div>
+    <div style="max-height:260px;overflow-y:auto;border:1px solid var(--border,#444);padding:6px;font-size:12px;background:rgba(0,0,0,0.2)">${logHtml}</div>
     <div class="modal-opt" onclick="simulateKey('a')" style="margin-top:10px">[a] Return to Main Menu</div>
     <div class="modal-opt" onclick="simulateKey('b')">[b] New Game</div>`;
-  renderModal('You Have Died', html, 'Letter/click to choose.');
+  renderModal('You Have Died', html, 'Letter/click to choose. Scroll the log above to see exactly what led to this.');
 }
 function gameOverChoice(letter) {
   if (letter === 'a') { showTitleScreen(); return; }
@@ -8860,7 +9216,13 @@ const GUIDE_SECTIONS = [
     full ability pools: Spells, Techniques, Eldritch Mutations, and Cyberware — so a custom character can pick up
     mutations or cybernetic implants right from the start, just like the Occultist and Cyber-Adept archetypes (implants
     are capped at ${CREATION_MAX_STARTING_CYBER} to start, matching your normal cybernetic slot limit). Every premade
-    archetype's attribute and ability spread can be fully recreated in Custom, with points to spare for gold or gear.</div>
+    archetype's attribute and ability spread can be fully recreated in Custom, with points to spare for gold or gear.
+    Every stat starts from a base of 8 (not 10), and no single stat can be pushed past +${CREATION_MAX_STAT_ADD} during
+    creation — keeps a custom build from dumping its whole budget into one attribute for a level-1 outlier.</div>
+    <div class="modal-opt"><b>Vitals now come from your stats.</b> Max HP is derived from CON and max MP from INT at
+    the moment you finish character creation (premade or custom) — instead of every class sharing an identical flat
+    HP/MP pool, a warrior's higher CON and a mage's higher INT genuinely produce a tankier warrior and a mana-richer
+    mage right from level 1. Leveling up continues to grow both further based on your current CON/INT.</div>
     ${generateScenarioGuideHTML()}
     <div class="modal-opt" style="margin-top:6px">From the main menu you can also Continue a saved game, or start fresh.
     Saving/loading uses your browser's local storage (or an exported file) — see the Saves &amp; Meta tab.</div>` },
@@ -9022,7 +9384,35 @@ const GUIDE_SECTIONS = [
     free-aim targeting — pick exactly the tile it lands on — alongside a <b>Use on self</b> option if you'd rather drink
     it or set it off at your own feet. ${ITEM_BASES.filter(b=>b.type==='material').length} crafting materials feed the
     Crafting screen (K).</div>
-    ${generateItemGuideHTML()}` },
+    ${generateItemGuideHTML()}
+    <div class="modal-opt" style="margin-top:10px;border:1px solid var(--amber-dim);padding:6px"><b>Requirements &amp;
+    Durability:</b>
+    <ul style="margin:6px 0 0 18px;padding:0">
+      <li><b>STR requirements.</b> Every weapon, and every body/head/feet/gloves/offhand armor piece, lists a STR
+      requirement (armor's is derived from how much it protects — heavier protection needs more muscle). Nothing is
+      ever locked from being equipped; falling short instead costs you: under-strength weapons hit less often and for
+      less damage, under-strength armor makes you easier to hit, drains stamina recovery each turn, and lowers your
+      dodge. Check an item's detail popup to see the requirement and whether you currently meet it.</li>
+      <li><b>INT/STR/DEX for spells &amp; techniques.</b> Spells expect a minimum INT and weapon-school techniques
+      expect a minimum STR or DEX (finesse schools — Daggers, Dual Wielding, Archery, Monastic Arts — use DEX; the
+      rest use STR), scaled to the ability's own cost/tier. Falling short risks the cast/use fizzling outright (the
+      resource is still spent) and reduces damage on anything that does land.</li>
+      <li><b>Durability.</b> Weapons and armor have a durability pool shown as [current/max] in your inventory and
+      equipped-gear lists. Plain, ordinary attacks never wear it down. What does: landing a critical hit (wears the
+      weapon), using an offensive technique (wears the weapon — martial techniques push gear harder than a normal
+      swing), tanking a hit for 15%+ of your max HP (wears a random piece of your armor), fighting anything corrosive
+      like oozes (extra armor wear), and standing in fire (armor wear on top of the burn damage). A weapon at 0
+      durability is <b>broken</b> — it still swings, just for roughly a third of its normal damage, until repaired.
+      Broken armor drops to a quarter of its listed protection. Legendary-tier drops (a top-tier prefix or suffix,
+      like "Godslayer" or "of Eternity") are effectively indestructible.</li>
+      <li><b>Repairing gear.</b> Repair Kits and Master's Repair Kits (buyable from blacksmiths/cybersmiths, craftable
+      from an iron ingot + leather, occasionally found as loot) fix whichever equipped piece needs it most. Any
+      blacksmith or cybersmith NPC can repair everything you have equipped to full for a gold fee (press <b>R</b> in
+      their trade screen). The Mending spell (Restoration) and Field Repair technique (Defense) do the same thing
+      in the field for mana/stamina instead of gold. Blacksmith's Touch (talent), Nanite Repair Mesh (cybernetic
+      implant), and Flesh-Melding Symbiosis (eldritch mutation) all grant slow, steady passive auto-repair over
+      time — pick whichever fits your build.</li>
+    </ul></div>` },
   { id:'magic', label:'Magic', html: () => `
     <div class="modal-opt">z opens your unified Abilities screen (spells, techniques, active cybernetics, active
     mutations together). ${SPELLS.length} spells across ${new Set(SPELLS.map(s=>s.school)).size} schools, spanning a real
@@ -9095,6 +9485,11 @@ const GUIDE_SECTIONS = [
     show a recommended level before you commit. Every deepest floor holds a boss whose strength is matched to that
     specific dungeon's real depth (not just its rarity label), and other floors have a chance at a themed miniboss — a
     real step up from regular monsters, short of a full boss fight.</div>
+    <div class="modal-opt" style="margin-top:6px"><b>Loot quality is tied to real threat level.</b> Every monster,
+    chest, and floor drop has its maximum possible item quality capped by how dangerous whatever dropped it actually
+    is (dungeon depth, monster tier, boss status) — a shallow-floor monster or an early chest simply can't roll a
+    top-tier "of Eternity"-class item, no matter how lucky the roll. Push deeper, fight tougher things, and better loot
+    genuinely becomes possible.</div>
     <div class="modal-opt" style="margin-top:6px"><b>Dungeons are more than corridors and monsters now.</b> Traps come
     in six real varieties — darts and rusty spikes (single-tile, immediate damage), fire traps and gas traps (ignite
     or gas a small area, using the same terrain engine as fire/gas spells), alarm runes (alert monsters across the
@@ -9127,7 +9522,13 @@ const GUIDE_SECTIONS = [
     NPCs. Each settlement belongs to a kingdom with generated history, announced the first time you enter its territory
     and always shown on your status panel. Beyond settlements: over 30 kinds of camps, ruins, shipwrecks, shrines, and
     stranger sites litter the wilds. Rare, powerful overworld bosses (an ancient dragon, a yeti king, an elder treant,
-    and more) roam fitting biomes — tread carefully.</div>` },
+    and more) roam fitting biomes — tread carefully.</div>
+    <div class="modal-opt" style="margin-top:6px"><b>The surface world gets more dangerous the further you wander.</b>
+    Overworld monsters (and overworld bosses) scale their stats up with distance from your starting area, the same
+    curve settlement size already follows — right around where you begin, everything is exactly base-strength; wander
+    far enough and even a "common" spawn hits noticeably harder. Loot found loose on the ground out there stays modest
+    regardless of distance, though — real gear upgrades come from fighting things, dungeons, and chests, not free
+    finds lying in a field.</div>` },
   { id:'bestiary', label:'Bestiary', html: () => `
     <div class="modal-opt">Dungeon-tier monsters and bosses, grouped by faction. Overworld wildlife (rabbits, wolves,
     bears, and the like) isn't listed here — it spawns based on biome and is generally weaker than anything below.</div>
@@ -9136,7 +9537,39 @@ const GUIDE_SECTIONS = [
     <div class="modal-opt">Every menu option is clickable. Click any visible map tile to examine it (including loose
     items — full stats shown, not just the ground biome). Scroll the mouse wheel over the map to zoom.</div>` },
   { id:'changelog', label:'Changelog', html: () => `
-    <div class="modal-opt"><b>Customization &amp; accessibility pass (latest):</b> floating combat text now rises and
+    <div class="modal-opt" style="border:1px solid var(--amber-dim);padding:6px"><b>Balance &amp; difficulty overhaul (latest):</b>
+    a full pass aimed at one thing — the early game was too easy and gear had no real cost or risk attached to it.
+    See the new <b>Requirements &amp; Durability</b> block in the Equipment tab and the <b>Classes</b> block in Combat
+    for the full breakdown. Summary of what changed:
+    <ul style="margin:6px 0 0 18px;padding:0">
+      <li>Weapons and heavy armor now carry a real STR requirement (soft-gated, not locked) — being under it costs
+      accuracy, damage, dodge, and stamina recovery rather than blocking the item outright.</li>
+      <li>Spells carry an INT requirement and weapon-school techniques carry a STR/DEX requirement in the same spirit
+      — underqualified casting risks a fizzle and pulls damage down.</li>
+      <li>Weapons and armor now have <b>Durability</b>. Ordinary attacks never wear it down — only crits, techniques,
+      tanking a heavy hit, corrosive enemies (oozes), and fire wear gear down. Repair via Repair Kits, a blacksmith's
+      <b>[R]</b> service, the Mending spell / Field Repair technique, or passive auto-repair from the new Blacksmith's
+      Touch talent, Nanite Repair Mesh implant, or Flesh-Melding Symbiosis mutation.</li>
+      <li>Loot rarity is now gated by what's actually dropping it — a trash monster can no longer roll a top-tier
+      "of Eternity"-class item. Every affix now has an explicit tier (0-4), and monster/chest/scatter loot caps which
+      tier it's allowed to reach based on a monster's real threat level (dungeon tier, XP, boss status), not a flat
+      constant. Unguarded overworld ground finds and chest loot are similarly capped by tier/depth.</li>
+      <li>Starting stats dropped from a flat 10 across the board to 8, and max HP/MP at character creation are now
+      <i>derived</i> from CON/INT instead of a flat 26/16 for every class — a warrior's higher CON and a mage's higher
+      INT now actually produce a tankier warrior and a mana-rich mage from level 1, instead of every archetype sharing
+      identical vitals.</li>
+      <li>Custom character creation's point budget came back down from 24 to 20, and no single stat can be pushed
+      above +6 during creation — closes off dumping the whole budget into one stat for an outlier level-1 character.</li>
+      <li>Overworld monsters (and overworld bosses) now scale up the further you wander from your starting area,
+      mirroring the same distance curve settlement size already used — previously only dungeons got harder with
+      progress, and the surface world stayed exactly as easy no matter how far you explored.</li>
+      <li>Critical hits are what they say they are again — critBonus/critDmgBonus talents, gear, and buffs actually
+      apply on top of a base crit chance.</li>
+      <li>Death now gets an actual death screen: cause of death (whatever landed the final blow — a monster, poison,
+      fire, a trap, a fall, drowning), your level/turn/gold/equipment at the time, and a scrollable log of the events
+      leading up to it.</li>
+    </ul></div>
+    <div class="modal-opt"><b>Customization &amp; accessibility pass:</b> floating combat text now rises and
     fades out smoothly instead of popping up as static text that lingered on screen — it also respects Reduce Motion
     (shorter rise, same fade). Settings are now reachable mid-game from three places: the <b>⚙</b> button in the
     top-right corner, or the <b>Esc</b>/<b>P</b> in-game menu, which also gained a <b>Quit to Title Screen</b> option
@@ -9372,6 +9805,7 @@ function handleKey(e) {
   if (gameState === 'trade') {
     if (key === 'Escape') { closeModal(); return; }
     if (key === 'Tab') { e.preventDefault(); tradeMode = tradeMode === 'buy' ? 'sell' : 'buy'; renderTrade(); return; }
+    if (key === 'R' && (dialogueNPC.roleId === 'blacksmith' || dialogueNPC.roleId === 'cybersmith')) { repairAtBlacksmith(dialogueNPC); return; }
     if (/^[a-z]$/.test(key)) { tradeTransact(key); return; }
     return;
   }
