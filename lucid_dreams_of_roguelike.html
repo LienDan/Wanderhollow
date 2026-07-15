@@ -1521,7 +1521,7 @@ TECHNIQUES.push(
   { id:'thousandyearstillness', name:'Thousand-Year Stillness', resource:'stamina', mp:35, type:'heal', power:[30,46], range:0, school:'Monastic Arts', tier:4, desc:'A meditative state so deep it heals body and mind alike.' },
   { id:'enlightenedfist', name:'Enlightened Fist', resource:'stamina', mp:50, type:'damage', power:[44,68], range:1, school:'Monastic Arts', tier:5, desc:'A strike delivered from a place beyond anger, beyond fear — only clarity.' },
   // ---- Tactics (leadership / battlefield control, mostly buffs and debuffs) ----
-  { id:'batttlecry', name:'Battle Cry', resource:'stamina', mp:10, type:'buff', stat:'str', power:3, dur:12, range:0, school:'Tactics', tier:1, desc:'A rallying shout that steels your resolve.' },
+  { id:'battlecry', name:'Battle Cry', resource:'stamina', mp:10, type:'buff', stat:'str', power:3, dur:12, range:0, school:'Tactics', tier:1, desc:'A rallying shout that steels your resolve.' },
   { id:'exploitweakness', name:'Exploit Weakness', resource:'stamina', mp:12, type:'debuff', stat:'armor', power:-6, dur:10, range:5, school:'Tactics', tier:1, desc:'You spot a gap in your foe\'s defenses and call it out.' },
   { id:'coordinatedstrike', name:'Coordinated Strike', resource:'stamina', mp:16, type:'buff', stat:'crit', power:0.12, dur:12, range:0, school:'Tactics', tier:2, desc:'Precise timing turns every follow-up strike lethal.' },
   { id:'demoralizingshout', name:'Demoralizing Shout', resource:'stamina', mp:18, type:'debuff', stat:'fear', power:1, dur:8, range:5, aoe:true, aoeRadius:2, school:'Tactics', tier:2, desc:'A shout that shakes the resolve of everything nearby.' },
@@ -1563,6 +1563,22 @@ TECHNIQUES.push(
   { id:'painisweakness', name:'Pain Is Weakness', resource:'stamina', mp:24, type:'bloodbuff', stat:'str', power:9, dur:14, selfCostPct:0.12, range:0, school:'Berserker Arts', tier:3, desc:'You embrace the pain and let it fuel you further.' },
   { id:'ki_burst', name:'Ki Burst', resource:'stamina', mp:16, type:'damage', power:[13,22], range:1, aoe:true, aoeRadius:1, stagger:true, school:'Monastic Arts', tier:2, desc:'A sudden release of inner energy that staggers everything nearby.' },
   { id:'divideandconquer', name:'Divide and Conquer', resource:'stamina', mp:26, type:'debuff', stat:'str', power:-8, dur:10, range:5, school:'Tactics', tier:3, desc:'Isolating a single foe from the rest makes them far easier to bring down.' },
+  // ---- Culinary Arts (Chef: a food-fueled fighter, melee backed by cooked buffs) ----
+  { id:'searingladle', name:'Searing Ladle Strike', resource:'stamina', mp:9, type:'damage', power:[7,14], range:1, school:'Culinary Arts', tier:1, desc:'A red-hot ladle straight off the stove, swung with real force.' },
+  { id:'quickbite', name:'Quick Bite', resource:'stamina', mp:10, type:'heal', power:[8,15], range:0, school:'Culinary Arts', tier:1, desc:'A hurried bite between blows keeps you standing.' },
+  { id:'clangingpans', name:'Clanging Pans', resource:'stamina', mp:15, type:'damage', power:[12,20], range:1, aoe:true, aoeRadius:1, school:'Culinary Arts', tier:2, desc:'You clatter a pair of heavy pans together, driving back everything nearby.' },
+  { id:'hearthsblessing', name:"Hearth's Blessing", resource:'stamina', mp:12, type:'buff', stat:'armor', power:8, dur:14, range:0, school:'Culinary Arts', tier:2, desc:'A bowl of hearty stew, eaten fast, leaves you feeling tough as old boots.' },
+  { id:'flambe', name:'Flambé', resource:'stamina', mp:22, type:'damage', power:[18,29], range:1, destructive:true, igniteGround:true, school:'Culinary Arts', tier:3, desc:'A dramatic tableside flambé that leaves your foe — and the floor — on fire.' },
+  { id:'grandfeast', name:'Grand Feast', resource:'stamina', mp:30, type:'heal', power:[22,34], range:0, school:'Culinary Arts', tier:4, desc:'A feast fit for champions, eaten in the middle of a fight.' },
+  { id:'chefsfinalcourse', name:"Chef's Final Course", resource:'stamina', mp:48, type:'damage', power:[40,62], range:1, aoe:true, aoeRadius:1, school:'Culinary Arts', tier:5, desc:'Every technique you know, plated as one final, unstoppable course.' },
+  // ---- Tinkering (Tinkerer: gadgets, mechanical strikes, and a belt full of consumable weapons) ----
+  { id:'wrenchbash', name:'Wrench Bash', resource:'stamina', mp:9, type:'damage', power:[7,14], range:1, school:'Tinkering', tier:1, desc:'A solid whack with a heavy wrench, right where it counts.' },
+  { id:'quickrig', name:'Quick Rig', resource:'stamina', mp:8, type:'buff', stat:'crit', power:0.12, dur:14, range:0, school:'Tinkering', tier:1, desc:'A few fast adjustments line up the perfect follow-up shot.' },
+  { id:'shrapneljab', name:'Shrapnel Jab', resource:'stamina', mp:15, type:'damage', power:[12,19], range:1, aoe:true, aoeRadius:1, school:'Tinkering', tier:2, desc:'A jury-rigged blade fitted with scrap sprays shrapnel on impact.' },
+  { id:'overclock', name:'Overclock', resource:'stamina', mp:12, type:'buff', stat:'dex', power:5, dur:12, range:0, school:'Tinkering', tier:2, desc:'You overclock your own reflexes with a jolt of questionable wiring.' },
+  { id:'combustiblecoating', name:'Combustible Coating', resource:'stamina', mp:22, type:'damage', power:[18,28], range:1, destructive:true, igniteGround:true, school:'Tinkering', tier:3, desc:'You coat your weapon in a volatile tincture that ignites on impact.' },
+  { id:'overloadedrig', name:'Overloaded Rig', resource:'stamina', mp:30, type:'damage', power:[24,38], range:1, aoe:true, aoeRadius:2, school:'Tinkering', tier:4, desc:'Every gadget on your belt goes off at once.' },
+  { id:'grandinvention', name:'Grand Invention', resource:'stamina', mp:48, type:'damage', power:[42,64], range:1, aoe:true, aoeRadius:2, destructive:true, school:'Tinkering', tier:5, desc:"Your magnum opus — a device you're still not sure should be legal." },
 );
 
 // ---- cybernetics: installed augments powered by Charge; some passive, some active ----
@@ -2460,6 +2476,8 @@ ITEM_BASES.push(
 ITEM_BASES.push(
   { id:'roasted_fish', name:'Roasted Fish', type:'consumable', effect:'heal', power:12, glyph:'%', color:'#e0a05a', value:8 },
   { id:'spiced_wine', name:'Spiced Wine', type:'consumable', effect:'buffstr', power:1, glyph:'%', color:'#8a1a3a', value:12 },
+  { id:'cleaver', name:'Kitchen Cleaver', type:'weapon', slot:'hand', dmg:[2,6], str:5, glyph:')', color:'#cfd6dd', value:14 },
+  { id:'wrench', name:'Heavy Wrench', type:'weapon', slot:'hand', dmg:[2,6], str:6, glyph:')', color:'#9a9a9a', value:16 },
 );
 
 // ---- new spells across schools (school field added to ALL spells for organization) ----
@@ -2597,6 +2615,14 @@ SPELLS.push(
   { id:'massheal', name:'Mass Heal', mp:34, type:'heal', power:[35,52], range:0, school:'Restoration', tier:4, desc:'A wave of restorative light washing over you and everything friendly nearby.' },
   { id:'reviveally', name:'Revive Ally', mp:45, type:'heal', power:[50,50], range:0, school:'Restoration', tier:5, desc:'A desperate, powerful ritual to pull an ally back from the brink.' },
   { id:'sanctuaryward', name:'Sanctuary Ward', mp:24, type:'buff', stat:'armor', power:16, dur:18, range:0, school:'Restoration', tier:3, desc:'A steady, powerful ward against further harm.' },
+  // ---- Herblore (Herbalist: toxins and tonics brewed from field ingredients) ----
+  { id:'toxicspores', name:'Toxic Spores', mp:9, type:'damage', power:[6,11], range:4, poison:2, school:'Herblore', tier:1, desc:'A burst of spores that leaves an itching, toxic film on the skin.' },
+  { id:'quickpoultice', name:'Quick Poultice', mp:10, type:'heal', power:[9,16], range:0, school:'Herblore', tier:1, desc:'A poultice pressed to the wound and mixed in seconds.' },
+  { id:'nettlecloud', name:'Nettle Cloud', mp:16, type:'damage', power:[8,14], range:3, aoe:true, aoeRadius:1, poison:3, school:'Herblore', tier:2, desc:'A cloud of stinging nettle dust that lingers on the skin.' },
+  { id:'invigoratingtonic', name:'Invigorating Tonic', mp:12, type:'buff', stat:'regen', power:3, dur:14, range:0, school:'Herblore', tier:2, desc:'A bracing tonic that keeps your wounds slowly closing.' },
+  { id:'toxinburst', name:'Toxin Burst', mp:22, type:'damage', power:[14,22], range:4, poison:5, school:'Herblore', tier:3, desc:'A concentrated dose that hits like a blow before the poison even sets in.' },
+  { id:'blightbloom', name:'Blightbloom', mp:32, type:'damage', power:[22,34], range:4, aoe:true, aoeRadius:2, poison:6, school:'Herblore', tier:4, desc:'A patch of toxic blooms bursts open in an instant, coating everything nearby.' },
+  { id:'natureswrath', name:"Nature's Wrath", mp:46, type:'damage', power:[36,56], range:5, aoe:true, aoeRadius:2, poison:8, school:'Herblore', tier:5, desc:'Every toxin you know how to brew, unleashed at once.' },
 );
 
 // ---- v3 balance pass: soft stat requirements for spells & techniques ----
@@ -3687,6 +3713,7 @@ function setTileWater(t) { t.walkable = false; t.feature = 'water'; t.glyph = '~
 function setTileChasm(t) { t.walkable = false; t.feature = 'chasm'; t.glyph = '\u2248'; t.color = '#1a1a22'; t.bg = '#000000'; }
 function isFlammableTile(t) {
   if (!t || !t.walkable || isWaterTile(t)) return false;
+  if (t.feature === 'scorched') return false; // burnt-out ground needs to regrow before it can catch again
   return t.biome === 'forest' || t.biome === 'denseforest' || t.biome === 'plains' || t.biome === 'swamp' ||
          t.feature === 'door' || t.feature === 'tentwall' || t.feature === 'grass' || t.feature === 'woodbridge';
 }
@@ -3732,6 +3759,24 @@ function igniteArea(cx, cy, radius) {
   for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
     if (dx*dx + dy*dy > radius*radius) continue;
     if (igniteTile(cx + dx, cy + dy, 4 + randInt(Math.random, 0, 3))) count++;
+  }
+  return count;
+}
+// ---- extinguishing: frost spells/bombs and water genuinely put fire out, not just deal frost
+// damage past it. Mirrors igniteArea/gasArea so any "water/frost puts out fire" effect can just
+// call this instead of re-implementing the tile lookup + smoke settle every time. ----
+function extinguishTile(x, y) {
+  const t = curTileAt(x, y);
+  if (!t) return false;
+  let did = false;
+  if (t.fireTurns > 0) { t.fireTurns = 0; t.smokeTurns = Math.max(t.smokeTurns || 0, 2); trackFxTile(t, x, y); did = true; }
+  return did;
+}
+function extinguishArea(cx, cy, radius) {
+  let count = 0;
+  for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
+    if (dx*dx + dy*dy > radius*radius) continue;
+    if (extinguishTile(cx + dx, cy + dy)) count++;
   }
   return count;
 }
@@ -3801,14 +3846,28 @@ function processTerrainEffects() {
         if (occupant === player) { wearRandomArmorPiece(1); lastDamageSource = 'fire'; }
         if (occupant.hp <= 0) onDeath(occupant, null);
       }
-      if (Math.random() < 0.35) {
-        const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-        for (const [dx,dy] of dirs) {
-          const nt = curTileAt(x+dx, y+dy);
-          if (nt && isFlammableTile(nt) && !nt.fireTurns && Math.random() < 0.4) igniteTile(x+dx, y+dy, 3 + randInt(Math.random,0,3));
+      // ---- throttled spread: a burning tile gets one modest roll for at most ONE new neighbor
+      // per turn (not all 8 every time), so a forest fire advances gradually over many turns
+      // instead of engulfing the whole map in a couple of ticks. Damp ground right next to water
+      // also has a chance to smother the flame early -- water genuinely fights fire here, not
+      // just fire spells. ----
+      let nextToWater = false;
+      for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) { if (isWaterTile(curTileAt(x+dx, y+dy))) { nextToWater = true; break; } }
+      if (nextToWater && Math.random() < 0.25) {
+        t.fireTurns = 0;
+      } else {
+        if (Math.random() < 0.5) {
+          const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+          for (let i = dirs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [dirs[i], dirs[j]] = [dirs[j], dirs[i]]; }
+          let spread = 0;
+          for (const [dx,dy] of dirs) {
+            if (spread >= 1) break;
+            const nt = curTileAt(x+dx, y+dy);
+            if (nt && isFlammableTile(nt) && !nt.fireTurns && Math.random() < 0.22) { igniteTile(x+dx, y+dy, 3 + randInt(Math.random,0,3)); spread++; }
+          }
         }
+        t.fireTurns--;
       }
-      t.fireTurns--;
       t.smokeTurns = Math.max(t.smokeTurns || 0, 3);
       keep = true;
       if (t.feature === 'woodbridge' && !entityAt(x, y) && Math.random() < 0.2) {
@@ -3818,9 +3877,25 @@ function processTerrainEffects() {
         t.fireTurns = 0;
         log('The burning bridge gives way and collapses!');
       }
+      // ---- burnout: ground that finishes burning turns to scorched ash (not flammable again --
+      // see isFlammableTile) instead of sitting there ready to reignite forever, and it slowly
+      // regrows on its own further down in this same loop. Structures (doors/tents/bridges)
+      // already have their own end-of-fire handling above, so leave those alone. ----
+      if (t.fireTurns <= 0 && t.feature !== 'door' && t.feature !== 'tentwall' && t.feature !== 'woodbridge') {
+        if (!t._scorchOrig) t._scorchOrig = { feature: t.feature, glyph: t.glyph, color: t.color };
+        t.feature = 'scorched'; t.glyph = ','; t.color = '#4a3a2a';
+        t.scorchRegrowTurns = 200 + randInt(Math.random, 0, 150);
+      }
     } else if (t.smokeTurns > 0) {
       t.smokeTurns--;
       if (t.smokeTurns > 0) keep = true;
+    }
+    if (t.scorchRegrowTurns > 0) {
+      t.scorchRegrowTurns--;
+      if (t.scorchRegrowTurns <= 0) {
+        if (t._scorchOrig) { t.feature = t._scorchOrig.feature; t.glyph = t._scorchOrig.glyph; t.color = t._scorchOrig.color; delete t._scorchOrig; }
+        else delete t.feature;
+      } else keep = true;
     }
     if (t.gasTurns > 0) {
       const occupant = entityAt(x, y);
@@ -8159,6 +8234,8 @@ function resolveThrowAtTile(it, wx, wy) {
     case 'aoefrost': {
       const hit = hostilesWithinRadius(wx, wy, radius);
       hit.forEach(t => { const dmg = Math.round(randInt(Math.random, it.power[0], it.power[1]) * dmgMult); t.hp -= dmg; log(`Freezing shrapnel tears into ${t.name} for ${dmg} frost damage.`); if (t.hp<=0) onDeath(t, player); });
+      const doused = extinguishArea(wx, wy, radius);
+      if (doused > 0) log('The freezing blast douses the flames nearby.');
       break;
     }
     case 'aoepoison': {
@@ -8270,7 +8347,7 @@ function useItem(it) {
     case 'stamina': { player.stamina = Math.min(player.maxStamina, player.stamina + it.power); log(`You recover ${it.power} Stamina.`); break; }
     case 'charge': { player.charge = Math.min(player.maxCharge, (player.charge||0) + it.power); log(`Your systems recharge ${it.power} Charge.`); break; }
     case 'aoefire': { const dmgMult = 1 + (player.alchemyPotencyBonus||0) + (player.throwDmgBonus||0); const radius = (it.radius||3) + (player.throwRadiusBonus||0); const hit = hostilesWithinRadius(player.x, player.y, radius); hit.forEach(t => { const dmg = Math.round(randInt(Math.random, it.power[0], it.power[1]) * dmgMult); t.hp -= dmg; log(`The blast engulfs ${t.name} for ${dmg} fire damage.`); if (t.hp<=0) onDeath(t, player); }); const d = scorchArea(player.x, player.y, radius+1); if (d>0) log(`The flames spread, destroying ${d} trees!`); igniteArea(player.x, player.y, radius); break; }
-    case 'aoefrost': { const dmgMult = 1 + (player.alchemyPotencyBonus||0) + (player.throwDmgBonus||0); const radius = (it.radius||3) + (player.throwRadiusBonus||0); const hit = hostilesWithinRadius(player.x, player.y, radius); hit.forEach(t => { const dmg = Math.round(randInt(Math.random, it.power[0], it.power[1]) * dmgMult); t.hp -= dmg; log(`Freezing shrapnel tears into ${t.name} for ${dmg} frost damage.`); if (t.hp<=0) onDeath(t, player); }); break; }
+    case 'aoefrost': { const dmgMult = 1 + (player.alchemyPotencyBonus||0) + (player.throwDmgBonus||0); const radius = (it.radius||3) + (player.throwRadiusBonus||0); const hit = hostilesWithinRadius(player.x, player.y, radius); hit.forEach(t => { const dmg = Math.round(randInt(Math.random, it.power[0], it.power[1]) * dmgMult); t.hp -= dmg; log(`Freezing shrapnel tears into ${t.name} for ${dmg} frost damage.`); if (t.hp<=0) onDeath(t, player); }); const doused = extinguishArea(player.x, player.y, radius); if (doused > 0) log('The freezing blast douses the flames nearby.'); break; }
     case 'aoepoison': { const radius = (it.radius||3) + (player.throwRadiusBonus||0); const hit = hostilesWithinRadius(player.x, player.y, radius); hit.forEach(t => { t.statusPoison = (t.statusPoison||0) + it.power; log(`${t.name} is engulfed in choking gas.`); }); break; }
     case 'aoeconfuse': { const radius = (it.radius||3) + (player.throwRadiusBonus||0); const hit = hostilesWithinRadius(player.x, player.y, radius); hit.forEach(t => { t.statusConfuse = (t.statusConfuse||0) + (it.power||3); log(`${t.name} is disoriented by the flash!`); }); break; }
     case 'cureposion': { player.statusPoison = 0; log('The poison is cleansed from your body.'); break; }
@@ -8742,6 +8819,30 @@ const ARCHETYPES = [
       player.equipment.hand=makeItem('dagger',0,Math.random); player.equipment.body=makeItem('robe',0,Math.random);
       player.inventory.push(makeItem('antidote',0,Math.random));
       player.knownSpells.push('alchemistfire','acidflask'); } },
+  { id:'chef', name:'Chef', desc:'A food-fueled fighter who cooks up buffs mid-battle and never goes into a fight hungry.',
+    apply: () => { player.str+=2; player.con+=3; player.wis+=1; player.gold+=70;
+      player.equipment.hand=makeItem('cleaver',0,Math.random); player.equipment.body=makeItem('leather',0,Math.random);
+      player.inventory.push(makeItem('meat_raw',0,Math.random)); player.inventory.push(makeItem('meat_raw',0,Math.random)); player.inventory.push(makeItem('meat_raw',0,Math.random));
+      player.inventory.push(makeItem('herb',0,Math.random)); player.inventory.push(makeItem('herb',0,Math.random));
+      player.inventory.push(makeItem('potato',0,Math.random)); player.inventory.push(makeItem('onion',0,Math.random));
+      player.knownRecipes.push('cook_meat','stew','cook_veg_soup');
+      player.knownTechniques.push('searingladle','quickbite'); } },
+  { id:'tinkerer', name:'Tinkerer', desc:'A gadgeteer who fights with a belt full of bombs, mines, and other things that go bang.',
+    apply: () => { player.dex+=3; player.int+=2; player.con+=1; player.gold+=70;
+      player.equipment.hand=makeItem('wrench',0,Math.random); player.equipment.body=makeItem('leather',0,Math.random);
+      player.inventory.push(makeItem('firebomb',0,Math.random)); player.inventory.push(makeItem('frostbomb',0,Math.random));
+      player.inventory.push(makeItem('sulfur',0,Math.random)); player.inventory.push(makeItem('sulfur',0,Math.random));
+      player.inventory.push(makeItem('saltpeter',0,Math.random)); player.inventory.push(makeItem('saltpeter',0,Math.random));
+      player.inventory.push(makeItem('iron_ingot',0,Math.random));
+      player.knownRecipes.push('craft_landmine','craft_firebomb','craft_frostbomb');
+      player.knownTechniques.push('wrenchbash','quickrig'); } },
+  { id:'herbalist', name:'Herbalist', desc:'A field botanist who brews toxins and tonics on the fly, poisoning foes as readily as mending wounds.',
+    apply: () => { player.wis+=3; player.int+=2; player.con+=1; player.gold+=65;
+      player.equipment.hand=makeItem('dagger',0,Math.random); player.equipment.body=makeItem('robe',0,Math.random);
+      player.inventory.push(makeItem('herb',0,Math.random)); player.inventory.push(makeItem('herb',0,Math.random));
+      player.inventory.push(makeItem('herb',0,Math.random)); player.inventory.push(makeItem('herb',0,Math.random));
+      player.knownRecipes.push('brew_heal_potion','antidote');
+      player.knownSpells.push('toxicspores','quickpoultice'); } },
   // ---- fringe: cybernetics & eldritch mutation ----
   { id:'cyberadept', name:'Cyber-Adept', desc:'Augmented flesh and steel — you paid a fortune for your first implant.',
     apply: () => { player.dex+=2; player.int+=2; player.str+=1; player.gold+=50;
@@ -8903,14 +9004,15 @@ function renderSettingsTab(tabId) {
 
 // Custom and Random sit at the front (before the letter-indexed premade classes) since they're
 // the two most commonly used entry points: Custom for players who want full control, Random for
-// players who just want to jump in. ARCHETYPES itself holds only the premade classes, offset by 2.
+// players who just want to jump in. They're bound to '0'/'9' rather than 'a'/'b' so all 26 letters
+// stay free for premade archetypes (room for up to 26 before this scheme needs revisiting again).
 function showArchetypePicker() {
   gameState = 'create_archetype';
   let html = '';
-  html += `<div class="modal-opt" onclick="simulateKey('a')">[a] <b>Custom</b> — build your own from scratch with a point-buy system.</div>`;
-  html += `<div class="modal-opt" onclick="simulateKey('b')">[b] <b>Random</b> — roll a random premade class and just go.</div>`;
+  html += `<div class="modal-opt" onclick="simulateKey('0')">[0] <b>Custom</b> — build your own from scratch with a point-buy system.</div>`;
+  html += `<div class="modal-opt" onclick="simulateKey('9')">[9] <b>Random</b> — roll a random premade class and just go.</div>`;
   ARCHETYPES.forEach((a, i) => {
-    const letter = String.fromCharCode(97 + i + 2);
+    const letter = String.fromCharCode(97 + i);
     html += `<div class="modal-opt" onclick="simulateKey('${letter}')">[${letter}] <b>${a.name}</b> — ${a.desc}</div>`;
   });
   html += `<div class="modal-opt" onclick="simulateKey('<')" style="margin-top:6px">[&lt;] Back to Main Menu</div>`;
@@ -8933,9 +9035,9 @@ function resetWorldState() {
 function archetypeChoice(letter) {
   if (letter === '<') { showTitleScreen(); return; }
   resetWorldState();
-  if (letter === 'a') { player = newPlayer(); creationDraft = { points: CREATION_POINTS, statAdds:{str:0,dex:0,int:0,con:0,wis:0}, abilities:[], abilityCat:'spells', gold:0, items:[] }; showCreateStats(); return; }
-  if (letter === 'b') { player = newPlayer(); const arch = choice(Math.random, ARCHETYPES); arch.apply(); recalcVitalsFromStats(); player.scenario = 'archetype:' + arch.id; log(`*** Random roll: you are a ${arch.name}! ***`); showStartScreen(); return; }
-  const idx = letter.charCodeAt(0) - 97 - 2;
+  if (letter === '0') { player = newPlayer(); creationDraft = { points: CREATION_POINTS, statAdds:{str:0,dex:0,int:0,con:0,wis:0}, abilities:[], abilityCat:'spells', gold:0, items:[] }; showCreateStats(); return; }
+  if (letter === '9') { player = newPlayer(); const arch = choice(Math.random, ARCHETYPES); arch.apply(); recalcVitalsFromStats(); player.scenario = 'archetype:' + arch.id; log(`*** Random roll: you are a ${arch.name}! ***`); showStartScreen(); return; }
+  const idx = letter.charCodeAt(0) - 97;
   const arch = ARCHETYPES[idx];
   if (!arch) return;
   player = newPlayer();
@@ -9207,9 +9309,10 @@ const GUIDE_SECTIONS = [
     ${CREATION_POINTS}-point budget, and <b>Random</b> rolls a premade class for you if you just want to jump in.
     Beyond those two, there are ${ARCHETYPES.length} ready-made classes spanning every weapon school (Warrior,
     Lancer, Ranger, Duelist, Rogue, Brawler, Berserker, Monk, Commander), every school of magic (Mage, Elementalist,
-    Stormcaller, Chronomancer, Illusionist, Paladin, Druid, Necromancer, Blood Mage, Summoner, Alchemist), and the
-    fringe paths of Cyber-Adept and Occultist. Each starts with gear and abilities that actually fit its theme — you
-    won't find yourself handed a spell that has nothing to do with your class.</div>
+    Stormcaller, Chronomancer, Illusionist, Paladin, Druid, Necromancer, Blood Mage, Summoner, Alchemist), a trio of
+    consumable-and-craft specialists (Chef, Tinkerer, Herbalist), and the fringe paths of Cyber-Adept and Occultist.
+    Each starts with gear and abilities that actually fit its theme — you won't find yourself handed a spell that has
+    nothing to do with your class.</div>
     <div class="modal-opt">Custom creation has three steps — Attributes, Abilities, then Gold &amp; Equipment — and you
     can freely move <b>[&lt;] Back</b> to an earlier step at any point to change your mind; nothing you've already
     chosen is lost while you do. On the Abilities step, press <b>1-4</b> (or click the tabs) to switch between four
@@ -9299,11 +9402,17 @@ const GUIDE_SECTIONS = [
     Caltrops and Net Traps apply a real Slow (a chance to skip their turn while it lasts), not just flavor text.</div>
     <div class="modal-opt" style="margin-top:6px"><b>Terrain physics:</b> fire spells, dragon breath, firebombs, and fire-touched
     monster attacks genuinely ignite the ground — flames spread to nearby flammable terrain (forest, plains, doors), burn
-    anyone standing on them each turn, and leave lingering smoke that blocks line of sight. Fire hitting water doesn't just
-    fizzle — it flashes into a burst of scalding <b>steam</b> that damages anyone standing in the water and leaves a brief
-    fog behind. Gas spells and grenades (Caustic Gas, Poison Cloud, Poison Gas Grenade, gas-cloud monsters) leave a real
-    lingering cloud that <b>spreads outward turn by turn</b> while it's fresh, thins out as it ages, and affects anyone —
-    ally, enemy, or you — who walks through it, not just whoever was standing there the moment it was cast.</div>
+    anyone standing on them each turn, and leave lingering smoke that blocks line of sight. Spread is gradual and a little
+    random — a burning tile only has a modest chance to catch one neighbor per turn — so a forest fire builds over many
+    turns rather than engulfing everything at once, and ground right next to water is prone to smothering out early. Once a
+    patch of ground finishes burning it's left as scorched, unflammable ash for a good long while before it regrows and can
+    catch again. Fire hitting water doesn't just fizzle — it flashes into a burst of scalding <b>steam</b> that damages
+    anyone standing in the water and leaves a brief fog behind. <b>Frost</b> spells and Frost Grenades genuinely put out
+    fire wherever they land, on top of their frost damage — dousing a burning tile is a legitimate way to stop a fire you
+    started (or one you didn't). Gas spells and grenades (Caustic Gas, Poison Cloud, Poison Gas Grenade, gas-cloud monsters)
+    leave a real lingering cloud that <b>spreads outward turn by turn</b> while it's fresh, thins out as it ages, and
+    affects anyone — ally, enemy, or you — who walks through it, not just whoever was standing there the moment it was
+    cast.</div>
     <div class="modal-opt"><b>Burning weapons:</b> stand next to any fire (a burning tile, not just a spell mid-cast) and
     choose <b>Dip in fire</b> from your equipped weapon's item menu to set it alight for several swings — bonus fire
     damage per hit and a chance to ignite the ground under whatever you strike. It burns out on its own; walk back to a
@@ -9731,7 +9840,7 @@ function handleKey(e) {
   if (gameState === 'title') { if (/^[a-z]$/.test(key)) titleScreenChoice(key); return; }
   if (gameState === 'settings') { if (key === 'Escape') { closeSettings(); return; } return; }
   if (gameState === 'confirmdelete') { if (key === 'y' || key === 'n' || key === 'Escape') { confirmDeleteSaveChoice(key); return; } return; }
-  if (gameState === 'create_archetype') { if (key === '<' || /^[a-z]$/.test(key)) archetypeChoice(key); return; }
+  if (gameState === 'create_archetype') { if (key === '<' || key === '0' || key === '9' || /^[a-z]$/.test(key)) archetypeChoice(key); return; }
   if (gameState === 'create_stats') { if (key === 'Enter' || key === '<' || /^[1-5]$/.test(key)) createStatsKey(key); return; }
   if (gameState === 'create_abilities') { if (key === 'Enter' || key === '<' || key === '[' || key === ']' || /^[1-4]$/.test(key) || /^[a-z]$/.test(key)) createAbilitiesKey(key); return; }
   if (gameState === 'create_final') { if (key === 'Enter' || key === 'g' || key === '<' || key === '[' || key === ']' || /^[a-z]$/.test(key)) createFinalKey(key); return; }
