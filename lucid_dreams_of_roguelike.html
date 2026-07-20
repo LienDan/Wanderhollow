@@ -395,6 +395,9 @@
       <h2>Equipped</h2>
       <div class="bar-text" id="equip-list" style="line-height:1.7"></div>
 
+      <h2>Quickslots <span class="dim" style="font-weight:normal;font-size:11px">(keys 1-4)</span></h2>
+      <div class="bar-text" id="quickslot-list" style="line-height:1.7"></div>
+
       <h2>Party</h2>
       <div class="bar-text" id="ally-text" style="line-height:1.6">none</div>
 
@@ -707,6 +710,13 @@ function fbm(x, y, scale, seed, octaves) {
 }
 function randInt(rng, a, b) { return a + Math.floor(rng() * (b - a + 1)); }
 function choice(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
+function shuffleArray(rng, arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 function weightedChoice(rng, entries) {
   // entries: [[item, weight], ...]
   let total = entries.reduce((s, e) => s + e[1], 0);
@@ -908,7 +918,27 @@ function baseDurabilityFor(base, affixTier) {
   const base60 = 30 + (base.valueTier || 0) * 18 + affixTier * 14;
   return base60;
 }
-function makeItem(baseId, rarity, rng) {
+// ============================================================================
+// ---- REBALANCE PASS 2: itemization now scales with power, not just luck ---
+// Before this, rarity (0-4) only gated which affix *tier* could roll -- it was
+// never connected to monster/dungeon power level at all beyond a 0-4 cap that
+// any rare-tier boss reached instantly. A level-22 kill of Thessaly Voss and
+// a level-98 kill of Yog'tha could hand out the literal same "Godslayer"
+// weapon, because nothing scaled the item's own base numbers. This adds a
+// second, independent axis: itemPowerMult(), keyed off the dropping
+// monster's own powerScale (see makeMonster/MONSTER_SCALE_BASE), multiplies
+// the item's base damage/armor/value after affixes are applied. Rarity still
+// controls affix quality; this controls the base the affixes sit on top of.
+// ============================================================================
+function itemPowerMult(monsterScale) {
+  return 1 + Math.pow(Math.max(0, (monsterScale || 1) - 1), 0.55);
+}
+// Companion curve for gear sources that don't have a specific monster driving them (radiant
+// quest rewards, and anywhere else that only has the player's own level to key off of).
+function playerLevelPowerMult(level) {
+  return 1 + Math.pow(Math.max(0, (level || 1) - 1) / 12, 1.15);
+}
+function makeItem(baseId, rarity, rng, powerMult) {
   rng = rng || Math.random;
   const base = ITEM_BASES.find(b => b.id === baseId);
   if (!base) return null;
@@ -947,6 +977,15 @@ function makeItem(baseId, rarity, rng) {
   if (pre) name = pre + ' ' + name;
   if (suf) name = name + ' ' + suf;
   it.name = name;
+  // power scaling applies to the base+affix result as a whole -- a "Sharp Waraxe" dropped by an
+  // endgame-scaled monster is a stronger Sharp Waraxe, not just a coin-flip for a better affix.
+  if (powerMult && powerMult > 1) {
+    if (dmg) { dmg[0] = Math.max(1, Math.round(dmg[0] * powerMult)); dmg[1] = Math.max(dmg[0], Math.round(dmg[1] * powerMult)); }
+    if (base.type === 'armor') armor = Math.round(armor * powerMult);
+    for (const s in bonuses) bonuses[s] = Math.round(bonuses[s] * powerMult);
+    value *= powerMult;
+    it.powerMult = powerMult;
+  }
   if (dmg) it.dmg = dmg;
   if (base.type === 'armor') it.armor = armor;
   if (strReqDelta && (base.type === 'weapon' || base.type === 'armor')) it.str = Math.max(0, (base.str || 0) + strReqDelta);
@@ -1389,20 +1428,101 @@ const KINGDOM_ERAS = [
   'Bandits and worse have grown bold in its more remote reaches.',
   'Scholars say its ruling line can be traced back over a dozen generations.',
 ];
+// ============================================================================
+// ---- KINGDOM LORE & POLITICS OVERHAUL — PHASE 5 ---------------------------
+// The old system gave every kingdom a name and one throwaway line of flavor
+// text that never touched gameplay again. This gives kingdoms a trait, a
+// ruler, a real multi-beat history (including a notable historical figure
+// that can turn up in NPC rumors), and -- the actual point -- a genuine,
+// deterministic, symmetric political relationship with each neighboring
+// kingdom (war/tension/peace/trade pact/alliance). That relation isn't just
+// text: it ripples into shop prices (helping a kingdom's rival costs you
+// there), and into which radiant quests a kingdom's people offer you (a
+// kingdom at war offers sabotage/border-defense work; an allied one offers
+// caravan escorts). See getKingdomRelation(), rollRadiantQuestOffer(), and
+// repPriceMult() for the actual hooks.
+// ============================================================================
+const KINGDOM_TRAITS = [
+  { id:'militaristic', label:'militaristic', desc:'Its roads are patrolled by soldiers, and every able hand knows which end of a spear is which.' },
+  { id:'mercantile', label:'mercantile', desc:'Merchant caravans outnumber farmers on its roads, and coin talks louder than titles here.' },
+  { id:'scholarly', label:'scholarly', desc:'Its libraries and academies draw scholars from kingdoms twice its size.' },
+  { id:'isolationist', label:'isolationist', desc:'Its borders are watched closely, and outsiders are tolerated more than welcomed.' },
+  { id:'pious', label:'pious', desc:'Shrines and clergy hold real sway here, often more than the throne itself.' },
+  { id:'lawless', label:'lawless', desc:'What law exists here is whatever the strongest local lord says it is.' },
+];
+const RULER_TITLES = { militaristic:'Warlord', mercantile:'Merchant-Prince', scholarly:'Archon', isolationist:'Warden', pious:'High Elect', lawless:'Chief' };
+const RULER_TITLES_F = { militaristic:'Warlady', mercantile:'Merchant-Princess', scholarly:'Archon', isolationist:'Warden', pious:'High Elect', lawless:'Chief' };
+const RULER_FIRST_NAMES = ['Aldric','Branwen','Cassian','Delyth','Edrin','Fiora','Gareth','Hessa','Ivarr','Joslyn','Kester','Lysandra','Maren','Nolan','Orla','Perrin','Rowena','Soren','Talyn','Vessa'];
+const HISTORICAL_FIGURE_ROLES = [
+  { role:'founding hero', line:(n,k)=>`Songs still name ${n} as the one who led the first settlers to ${k}.` },
+  { role:'betrayer', line:(n,k)=>`${n}'s name is spat more than spoken in ${k} -- a trusted commander who sold out the crown for gold.` },
+  { role:'saint', line:(n,k)=>`${n} is remembered in ${k} as the healer who broke a plague that should have ended everything.` },
+  { role:'conqueror', line:(n,k)=>`${n} carved out half of ${k}'s current borders by the sword, and nobody has managed to take it back.` },
+  { role:'lost ruler', line:(n,k)=>`${n} vanished from ${k} a generation ago, chasing a rumor no one will name aloud, and never returned.` },
+];
+const KINGDOM_RELATION_STATES = [
+  { id:'war', label:'at war', weight:12, priceRipple:0.10 },
+  { id:'tension', label:'in a tense standoff', weight:23, priceRipple:0.04 },
+  { id:'peace', label:'at an uneasy peace', weight:35, priceRipple:0 },
+  { id:'trade_pact', label:'bound by a trade pact', weight:20, priceRipple:-0.04 },
+  { id:'alliance', label:'formal allies', weight:10, priceRipple:-0.08 },
+];
+const kingdomRelations = new Map();
+function relationPairKey(a, b) { return [a, b].sort().join('|'); }
+function getKingdomRelation(keyA, keyB) {
+  if (keyA === keyB) return null;
+  const rk = relationPairKey(keyA, keyB);
+  let r = kingdomRelations.get(rk);
+  if (r) return r;
+  const rng = mulberry32((hashString(rk) ^ SEED ^ 0x4b494e47) >>> 0);
+  r = weightedChoice(rng, KINGDOM_RELATION_STATES.map(s => [s.id, s.weight]));
+  kingdomRelations.set(rk, r);
+  return r;
+}
+function hashString(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; } return h; }
+function kingdomNeighborKeys(key) {
+  const [rx, ry] = key.split(',').map(Number);
+  return [`${rx+1},${ry}`, `${rx-1},${ry}`, `${rx},${ry+1}`, `${rx},${ry-1}`];
+}
+function getKingdomByKey(key) {
+  const [rx, ry] = key.split(',').map(Number);
+  return getKingdom(rx * KINGDOM_REGION, ry * KINGDOM_REGION);
+}
 const kingdomRegistry = new Map();
+const KINGDOM_REGION = 40;
 function getKingdom(cx, cy) {
-  const REGION = 40;
-  const rx = Math.floor(cx / REGION), ry = Math.floor(cy / REGION);
+  const rx = Math.floor(cx / KINGDOM_REGION), ry = Math.floor(cy / KINGDOM_REGION);
   const key = rx + ',' + ry;
   let k = kingdomRegistry.get(key);
   if (k) return k;
   const rng = mulberry32((rx * 92821 + ry * 68917 + SEED + 55511) | 0);
   const name = 'the ' + (rng() < 0.5 ? 'Kingdom' : 'Realm') + ' of ' + choice(rng, KINGDOM_PREFIXES) + choice(rng, KINGDOM_SUFFIXES);
   const founded = 40 + Math.floor(rng() * 900);
-  const history = `${name}, ${choice(rng, KINGDOM_EVENTS)} some ${founded} years ago. ${choice(rng, KINGDOM_ERAS)}`;
-  k = { name, founded, history, key };
+  const trait = choice(rng, KINGDOM_TRAITS);
+  const rulerIsFemale = rng() < 0.5;
+  const rulerName = choice(rng, RULER_FIRST_NAMES);
+  const rulerTitle = (rulerIsFemale ? RULER_TITLES_F : RULER_TITLES)[trait.id];
+  const figureRole = choice(rng, HISTORICAL_FIGURE_ROLES);
+  const figureName = choice(rng, RULER_FIRST_NAMES);
+  const history = `${name}, ${choice(rng, KINGDOM_EVENTS)} some ${founded} years ago. ${choice(rng, KINGDOM_ERAS)} `
+    + `It is a ${trait.label} realm: ${trait.desc} ${rulerTitle} ${rulerName} rules from its capital today. `
+    + figureRole.line(figureName, name);
+  k = { name, founded, history, key, trait: trait.id, rulerName, rulerTitle, figureName, figureRole: figureRole.role };
   kingdomRegistry.set(key, k);
   return k;
+}
+// Human-readable relation summary for a kingdom's immediate neighbors -- used by the Look
+// Around panel and the guide; kept separate from getKingdom() itself so it stays cheap to call
+// often (relations are memoized, but we don't want to force-generate every neighbor kingdom's
+// full lore just to render one line of political context).
+function kingdomRelationsSummary(key) {
+  const lines = [];
+  for (const nk of kingdomNeighborKeys(key)) {
+    const rel = getKingdomRelation(key, nk);
+    const state = KINGDOM_RELATION_STATES.find(s => s.id === rel);
+    if (state) lines.push(state);
+  }
+  return lines;
 }
 
 // ===================== DATA EXPANSION PACK 6 — NEW POWER SYSTEMS =====================
@@ -2671,6 +2791,7 @@ Object.assign(DUNGEON_THEMES, {
   sunken_ruins:     { name:'Sunken Ruins', tier:'rare', genre:'cave', depthRange:[6,9], dtierMax:3, hazard:'water' },
   dragons_lair:     { name:"Dragon's Lair", tier:'rare', genre:'cave', depthRange:[7,11], dtierMax:4 },
   demon_gate:       { name:'Demon Gate', tier:'rare', genre:'rooms', depthRange:[7,11], dtierMax:4 },
+  gods_threshold:   { name:"The Threshold", tier:'rare', genre:'rooms', depthRange:[10,12], dtierMax:5 },
   forgotten_library:{ name:'Forgotten Library', tier:'rare', genre:'rooms', depthRange:[6,9], dtierMax:3 },
   cyber_vault:      { name:'Cyber Vault', tier:'rare', genre:'rooms', depthRange:[6,10], dtierMax:3, lootBias:'cyber' },
   eldritch_rift:    { name:'Eldritch Rift', tier:'rare', genre:'cave', depthRange:[7,11], dtierMax:4, lootBias:'eldritch' },
@@ -2802,6 +2923,820 @@ const BOSS_POWER = {
 };
 for (const id in BOSS_POWER) if (MONSTER_BASES[id]) MONSTER_BASES[id].bossPower = BOSS_POWER[id];
 
+// ============================================================================
+// ---- STORY BOSSES — PHASE 2: Bosses Batch 1 -------------------------------
+// Five hand-authored, uniquely-scripted bosses, one per archetype requested:
+// a fallen knight (melee techniques), a necromancer-king (spells), a rogue
+// war-machine (cybernetics), a ranger (ranged), and a cosmic horror
+// (eldritch). Each has real lore, on-encounter/phase/death dialogue, and a
+// bespoke multi-phase AI with 5-6 distinct named moves apiece. scriptedAI
+// takes over the whole turn for these -- they do not use the generic
+// behavior system at all. They're wired into the existing overworld-boss
+// spawn pipeline (find them wandering the right biomes) and into
+// sortedBossPool(), so the Main Quest (Phase 1) can now pull them into its
+// "Rising Threat", "Betrayal", "The Source", and "The Gathering Storm" beats
+// automatically, right alongside the previously-existing bosses.
+// ============================================================================
+
+const STORY_BOSSES = [
+  { id:'oathbroken', name:'Seraphine Duskwarden, the Oathbroken', glyph:'@', color:'#c9a8e0', hp:210, str:24, dex:16, atk:[10,20], armor:9,
+    xp:380, boss:true, bossTier:'rare', faction:'human', behavior:'aggressive', biomes:['plains','forest'], berserkHpPct:0.3,
+    scriptedAI:'oathbroken', engageLine:"You wear that armor like you earned it. Let's see.",
+    deathLine:"Tell them... I remembered my oath. At the end, I remembered.",
+    lore:"Once the finest blade of a royal order, Seraphine broke her oath to save her kingdom from a war it could not win -- and was exiled for it. She fights everyone who comes looking for her as a test: only someone who can beat her deserves to hear why.",
+    desc:'A knight in tarnished silver armor, blade held in a perfect, patient guard.' },
+  { id:'hollow_king', name:'Ashgrave, the Hollow King', glyph:'L', color:'#5ad48a', hp:230, str:14, dex:10, atk:[6,13], armor:4,
+    xp:400, boss:true, bossTier:'rare', faction:'undead', behavior:'ranged', biomes:['swamp','tundra','mountain'],
+    scriptedAI:'hollow_king', engageLine:"A kingdom without a king is just a grave that hasn't finished digging itself.",
+    deathLine:"Good. Let someone else... wear the crown for a while.",
+    lore:"Ashgrave ruled well, once. When plague took his court he refused to let death end his reign, and struck a bargain that kept him standing long after everyone he loved was gone. He rules an empty court of the dead now, and hates every minute of it.",
+    desc:'A crowned corpse-king, robes of rot and old velvet, court of bones assembled behind him.' },
+  { id:'vex9', name:'Vex-9, the Discarded Iron', glyph:'&', color:'#e0a030', hp:250, str:20, dex:14, atk:[9,18], armor:11,
+    xp:420, boss:true, bossTier:'rare', faction:'construct', behavior:'ranged', biomes:['mountain','desert'], berserkHpPct:0.3,
+    scriptedAI:'vex9', engageLine:"UNIT VEX-9: DECOMMISSION ORDER REJECTED. THREAT ASSESSMENT: YOU.",
+    deathLine:"CORE... FAILING... FUNCTION WAS... ALL I... HAD...",
+    lore:"Built as a war-golem for a conflict that ended before it activated, Vex-9 was left buried and forgotten for two hundred years. It dug itself out with one directive intact -- fight -- and no memory of who it was supposed to fight for.",
+    desc:'A hulking war-construct, rusted plating scored by two centuries of buried silence.' },
+  { id:'windrender', name:'Skarn Windrender', glyph:'r', color:'#7ac97a', hp:190, str:15, dex:22, atk:[7,15], armor:5,
+    xp:360, boss:true, bossTier:'rare', faction:'human', behavior:'ranged', biomes:['forest','plains'],
+    scriptedAI:'windrender', engageLine:"Every hunt ends the same way. Yours too.",
+    deathLine:"...a clean shot, at least. I'd have wanted... a clean shot.",
+    lore:"Skarn has hunted every kind of beast this world has to offer and grew bored of all of them. Word that something dangerous was passing through her territory brought her out of retirement -- she wanted to see if you'd be a better hunt than the last hundred.",
+    desc:'A ranger in weathered leathers, bow already drawn, three hounds pacing behind her.' },
+  { id:'unblinking_eye', name:"Yog'tha, the Unblinking Eye", glyph:'H', color:'#8a2ad4', hp:270, str:18, dex:11, atk:[8,17], armor:6,
+    xp:450, boss:true, bossTier:'rare', faction:'eldritch', behavior:'ranged', biomes:['swamp','tundra'], berserkHpPct:0.3,
+    scriptedAI:'unblinking_eye', engageLine:"finally. someone worth. looking. at.",
+    deathLine:"you were. never. looking. back. were you.",
+    lore:"Nothing about Yog'tha makes sense from the outside, and it does not want to. It arrived from somewhere between places, drawn by nothing anyone can name, and now simply watches -- until you're close enough that watching stops being enough.",
+    desc:'A drifting mass of eyes and half-formed limbs, wrongness radiating off it like heat.' },
+  // ---- Batch 2: fills the early-game gap (the original five all landed power 4-6; nothing
+  // scripted existed below that) plus two more high-tier fights. ----
+  { id:'broken_blade', name:'Thessaly Voss, the Broken Blade', glyph:'@', color:'#8a8a9a', hp:70, str:12, dex:20, atk:[4,9], armor:3,
+    xp:60, boss:true, bossTier:'uncommon', faction:'human', behavior:'aggressive', biomes:['plains','forest'],
+    scriptedAI:'broken_blade', engageLine:"Don't feel bad. Nobody sees the first cut coming.",
+    deathLine:"Heh. Kept my streak alive -- never bored anyone to death, at least.",
+    lore:"Thessaly was a duelist-for-hire until a contract went bad and her own employer tried to bury the evidence, namely her. She survived, and now takes contracts on exactly the kind of people who hire duelists to bury problems.",
+    desc:'A wiry duelist in road-worn leathers, twin blades held loose and low.' },
+  { id:'blightspeaker', name:'Grimsen Oldhollow, the Blightspeaker', glyph:'d', color:'#5a8a3a', hp:110, str:13, dex:9, atk:[4,10], armor:2,
+    xp:95, boss:true, bossTier:'uncommon', faction:'plant', behavior:'ranged', biomes:['forest','swamp'],
+    scriptedAI:'blightspeaker', engageLine:"The grove speaks. You just have to stop shouting long enough to listen.",
+    deathLine:"It isn't dying... it's just letting go. Same as I'm about to.",
+    lore:"Grimsen was a druid before the grove he protected was poisoned beyond healing. Rather than let it die alone, he let it grow into him instead. He isn't sure anymore where the corruption ends and he begins.",
+    desc:'A robed figure whose skin has gone to bark and bramble in patches, eyes a sickly green.' },
+  { id:'choir_of_rust', name:'The Choir of Rust', glyph:'&', color:'#a04a2a', hp:260, str:16, dex:14, atk:[6,14], armor:8,
+    xp:430, boss:true, bossTier:'rare', faction:'construct', behavior:'ranged', biomes:['mountain','desert'],
+    scriptedAI:'choir_of_rust', engageLine:"UNIT 1 OF MANY: SIGNAL ACQUIRED. THE CHOIR SINGS.",
+    deathLine:"UNIT 1 OF MANY... SILENCED... THE CHOIR... SINGS ON... ELSEWHERE...",
+    lore:"No one built the Choir on purpose. It began as maintenance drones from some long-dead facility, networked to repair one another -- until the network started repairing itself into something that had never been designed, only accumulated.",
+    desc:'A shifting cluster of scavenged drone parts, dozens of small units moving as one.' },
+  { id:'snowbound_warden', name:'Kaelen Frost, the Snowbound Warden', glyph:'@', color:'#9adcf0', hp:300, str:20, dex:16, atk:[10,20], armor:9,
+    xp:470, boss:true, bossTier:'rare', faction:'human', behavior:'ranged', biomes:['tundra','mountain'], berserkHpPct:0.3,
+    scriptedAI:'snowbound_warden', engageLine:"This border has held for three hundred years. It will hold today, too.",
+    deathLine:"Good. Good... the border needed someone who could actually... move it forward, for once.",
+    lore:"Kaelen has guarded the same frozen border for longer than anyone alive can verify, sworn to an isolationist kingdom that has half-forgotten why the border matters. He hasn't. He takes the oath more seriously than the kingdom that gave it to him ever has.",
+    desc:'A towering warden in frost-rimed plate, breath fogging the air, a spear of ice-blue steel in hand.' },
+];
+MONSTER_BASES.thornling = { name:'Thornling', glyph:'t', color:'#4a8a2a', hp:16, str:8, dex:8, atk:[2,5], armor:1, xp:12, behavior:'aggressive', dtier:1, faction:'plant' };
+MONSTER_BASES.rust_drone = { name:'Rust Drone', glyph:'r', color:'#c9702a', hp:20, str:9, dex:12, atk:[2,6], armor:2, xp:16, behavior:'ranged', dtier:2, faction:'construct' };
+STORY_BOSSES.forEach(b => {
+  MONSTER_BASES[b.id] = {
+    name: b.name, desc: b.desc, glyph: b.glyph, color: b.color,
+    hp: b.hp, str: b.str, dex: b.dex, atk: b.atk.slice(), armor: b.armor,
+    xp: b.xp, behavior: b.behavior, boss: true, bossTier: b.bossTier, dtier: 5,
+    faction: b.faction, scriptedAI: b.scriptedAI, engageLine: b.engageLine, deathLine: b.deathLine,
+    lore: b.lore, berserkHpPct: b.berserkHpPct || null,
+  };
+});
+BOSS_POWER.oathbroken = 4; BOSS_POWER.hollow_king = 5; BOSS_POWER.vex9 = 5; BOSS_POWER.windrender = 4; BOSS_POWER.unblinking_eye = 6;
+BOSS_POWER.broken_blade = 2; BOSS_POWER.blightspeaker = 3; BOSS_POWER.choir_of_rust = 5; BOSS_POWER.snowbound_warden = 6;
+for (const id of STORY_BOSSES.map(b => b.id)) MONSTER_BASES[id].bossPower = BOSS_POWER[id];
+OVERWORLD_BOSSES.push(...STORY_BOSSES);
+
+// ---- shared scripted-boss helpers ----
+function bossPhase(m) { const pct = m.hp / (m.maxHp || m.hp || 1); return pct > 0.66 ? 1 : (pct > 0.33 ? 2 : 3); }
+function announceBossPhase(m, lines) {
+  const p = bossPhase(m);
+  if (m.lastPhase !== p) { m.lastPhase = p; if (lines[p]) log(`${m.name}: "${lines[p]}"`); }
+  return p;
+}
+function bossReady(m, key) { m.cd = m.cd || {}; return (m.cd[key] || 0) <= 0; }
+function bossCool(m, key, n) { m.cd = m.cd || {}; m.cd[key] = n; }
+function bossTickCds(m) { if (m.cd) for (const k in m.cd) if (m.cd[k] > 0) m.cd[k]--; }
+// Deals a normal hit via doAttack, then tops it up so total damage is roughly dmgMult times a
+// normal hit -- reuses all of doAttack's hit/dodge/crit/armor math instead of duplicating it.
+function bossMeleeHit(m, dmgMult) {
+  const before = player.hp;
+  doAttack(m, player);
+  const dealt = before - player.hp;
+  if (dmgMult && dmgMult > 1 && dealt > 0) {
+    const extra = Math.round(dealt * (dmgMult - 1));
+    player.hp -= extra;
+    if (settings.showDamageNumbers) spawnFloatingText(player.x, player.y, '-' + extra, '#ff5555');
+  }
+}
+function bossRangedHit(m, dmgMult) {
+  Sound.play('breathWeapon');
+  bossMeleeHit(m, dmgMult);
+}
+// For "direct damage" signature moves (void rend, hellfire nova, judgment strikes) that bypass
+// doAttack entirely -- scales off the boss's own current (already depth/level-scaled) attack
+// stat rather than a hardcoded flat number, so these moves stay meaningful whether the boss was
+// spawned as an early trial or a true endgame encounter, instead of the number going stale.
+function bossScaledDirectDamage(m, mult) {
+  const base = m.atk ? (m.atk[0] + m.atk[1]) / 2 : (m.str || 10) * 0.6;
+  return Math.max(1, Math.round(base * mult * (0.9 + Math.random() * 0.2)));
+}
+function bossSummon(m, monsterId, count) {
+  for (let i = 0; i < count; i++) {
+    const spot = findOpenAdjacent(m.x, m.y);
+    if (!spot) continue;
+    const scale = 1 + Math.floor((player.level || 1) / 8);
+    const s = makeMonster(monsterId, spot.x, spot.y, scale, Math.random);
+    s.engaged = true;
+    addMonsterToWorld(s);
+  }
+  Sound.play('summon');
+}
+
+const STORY_BOSS_AI = {
+  // ---- Seraphine Duskwarden, "the Oathbroken" — melee techniques ----
+  oathbroken(m, dist, seesPlayer) {
+    bossTickCds(m);
+    const p = announceBossPhase(m, {
+      2: "You're better than I expected. Good.",
+      3: "Then let's finish this the old way.",
+    });
+    if (!seesPlayer && !m.engaged) { wander(m); return true; }
+    if (dist > 1) { stepToward(m, player.x, player.y); return true; }
+    if (p === 3 && bossReady(m, 'execute') && player.hp / (player.maxHp || 1) < 0.3) {
+      bossCool(m, 'execute', 6);
+      log(`${m.name} calls out, "Executioner's Focus!"`);
+      bossMeleeHit(m, 2.2);
+      return true;
+    }
+    if (p >= 2 && bossReady(m, 'shieldbreak') && Math.random() < 0.35) {
+      bossCool(m, 'shieldbreak', 5);
+      log(`${m.name} lands a Shieldbreaker Slam, staggering you!`);
+      bossMeleeHit(m, 1.5);
+      player.statusSlow = Math.max(player.statusSlow || 0, 2);
+      return true;
+    }
+    if (bossReady(m, 'whirlwind') && Math.random() < 0.35) {
+      bossCool(m, 'whirlwind', 4);
+      log(`${m.name} spins into a Whirlwind Strike!`);
+      bossMeleeHit(m, 1.4);
+      return true;
+    }
+    if (!m.usedSecondWind && p >= 2 && Math.random() < 0.25) {
+      m.usedSecondWind = true;
+      const heal = Math.round(m.maxHp * 0.15);
+      m.hp = Math.min(m.maxHp, m.hp + heal);
+      log(`${m.name} draws on old training -- Second Wind! (+${heal} HP)`);
+      return true;
+    }
+    bossMeleeHit(m, 1);
+    return true;
+  },
+
+  // ---- Ashgrave, the Hollow King — necromancer/spellcaster ----
+  hollow_king(m, dist, seesPlayer) {
+    bossTickCds(m);
+    const p = announceBossPhase(m, {
+      2: "Rise. All of you. Rise.",
+      3: "Then I will hold the line myself, as I always have.",
+    });
+    if (!seesPlayer && !m.engaged) { wander(m); return true; }
+    if (dist <= 2 && bossReady(m, 'blink')) {
+      bossCool(m, 'blink', 6);
+      const spot = findOpenAdjacent(player.x, player.y);
+      if (spot && chebyshev(spot.x, spot.y, player.x, player.y) >= 2) { m.x = spot.x; m.y = spot.y; }
+      else { const s2 = findOpenAdjacent(m.x, m.y); if (s2) { m.x = s2.x; m.y = s2.y; } }
+      log(`${m.name} dissolves into mist and reforms at a distance.`);
+      return true;
+    }
+    if (p === 3 && !m.usedCourt && bossReady(m, 'raise')) {
+      m.usedCourt = true;
+      bossCool(m, 'raise', 10);
+      log(`${m.name}: "Rise, my court!"`);
+      bossSummon(m, 'skeleton', 3);
+      return true;
+    }
+    if (bossReady(m, 'raise') && Math.random() < 0.3) {
+      bossCool(m, 'raise', 8);
+      log(`${m.name} raises skeletal servants from the ground!`);
+      bossSummon(m, 'skeleton', p >= 2 ? 2 : 1);
+      return true;
+    }
+    if (seesPlayer && dist >= 2 && dist <= 7 && bossReady(m, 'curse')) {
+      bossCool(m, 'curse', 5);
+      Sound.play('trap');
+      player.statusPoison = (player.statusPoison || 0) + 6;
+      log(`${m.name} lays a Curse of Withering on you!`);
+      return true;
+    }
+    if (seesPlayer && dist >= 2 && dist <= 7) {
+      bossRangedHit(m, 1.1);
+      log(`${m.name} hurls a bolt of void-fire!`);
+      return true;
+    }
+    stepToward(m, player.x, player.y);
+    return true;
+  },
+
+  // ---- Vex-9, the Discarded Iron — cybernetics/war-construct ----
+  vex9(m, dist, seesPlayer) {
+    bossTickCds(m);
+    announceBossPhase(m, {
+      2: "RECALIBRATING. THREAT LEVEL: ELEVATED.",
+      3: "ALL SAFETIES DISENGAGED.",
+    });
+    if (!seesPlayer && !m.engaged) { wander(m); return true; }
+    if (dist <= 2 && bossReady(m, 'emp')) {
+      bossCool(m, 'emp', 6);
+      Sound.play('trap');
+      player.statusConfuse = (player.statusConfuse || 0) + 3;
+      log(`${m.name} discharges an EMP Pulse! Your thoughts scatter with static.`);
+      return true;
+    }
+    if (dist >= 2 && dist <= 8 && bossReady(m, 'missiles')) {
+      bossCool(m, 'missiles', 5);
+      log(`${m.name} fires a Missile Barrage!`);
+      bossRangedHit(m, 1.2); bossRangedHit(m, 1.0);
+      return true;
+    }
+    if (dist >= 2 && dist <= 8 && bossReady(m, 'burst')) {
+      bossCool(m, 'burst', 3);
+      log(`${m.name} opens up with a Rapid-Fire Burst!`);
+      bossRangedHit(m, 1.0); bossRangedHit(m, 0.8);
+      return true;
+    }
+    if (!m.usedRepair && m.hp < m.maxHp * 0.5 && bossReady(m, 'repair')) {
+      m.usedRepair = true;
+      bossCool(m, 'repair', 10);
+      const heal = Math.round(m.maxHp * 0.18);
+      m.hp = Math.min(m.maxHp, m.hp + heal);
+      log(`${m.name}: "REPAIR PROTOCOL ENGAGED." (+${heal} HP)`);
+      return true;
+    }
+    if (dist > 1) { stepToward(m, player.x, player.y); return true; }
+    bossMeleeHit(m, 1);
+    return true;
+  },
+
+  // ---- Skarn Windrender — ranger/hunter ----
+  windrender(m, dist, seesPlayer) {
+    bossTickCds(m);
+    const p = announceBossPhase(m, {
+      2: "You're faster than the last one. Barely.",
+      3: "One clean shot. That's all I need.",
+    });
+    if (!seesPlayer && !m.engaged) { wander(m); return true; }
+    if (p === 3 && bossReady(m, 'finish') && player.hp / (player.maxHp || 1) < 0.25 && dist >= 2 && dist <= 8) {
+      bossCool(m, 'finish', 6);
+      log(`${m.name} lines up a Finishing Shot!`);
+      bossRangedHit(m, 2.0);
+      return true;
+    }
+    if (dist >= 2 && dist <= 8 && bossReady(m, 'net')) {
+      bossCool(m, 'net', 6);
+      Sound.play('trap');
+      player.statusSlow = Math.max(player.statusSlow || 0, 4);
+      log(`${m.name} pins you with a Net Trap!`);
+      return true;
+    }
+    if (p >= 2 && !m.usedHounds && bossReady(m, 'hounds')) {
+      m.usedHounds = true;
+      bossCool(m, 'hounds', 12);
+      log(`${m.name} whistles sharply -- her hounds close in!`);
+      bossSummon(m, 'wolf', 2);
+      return true;
+    }
+    if (dist >= 2 && dist <= 8 && bossReady(m, 'poison')) {
+      bossCool(m, 'poison', 4);
+      player.statusPoison = (player.statusPoison || 0) + 5;
+      log(`${m.name} looses a Poison Arrow!`);
+      bossRangedHit(m, 0.6);
+      return true;
+    }
+    if (dist <= 2) { stepAway(m, player.x, player.y); return true; }
+    if (dist >= 2 && dist <= 8) { bossRangedHit(m, 0.9); log(`${m.name} fires a Called Shot!`); return true; }
+    stepToward(m, player.x, player.y);
+    return true;
+  },
+
+  // ---- Yog'tha, the Unblinking Eye — eldritch cosmic horror ----
+  unblinking_eye(m, dist, seesPlayer) {
+    bossTickCds(m);
+    const p = announceBossPhase(m, {
+      2: "you flinch. good. that means it's working.",
+      3: "the eye opens all the way now.",
+    });
+    if (!seesPlayer && !m.engaged) { wander(m); return true; }
+    if (p >= 2 && bossReady(m, 'tear') && dist >= 2) {
+      bossCool(m, 'tear', 7);
+      const spot = findOpenAdjacent(m.x, m.y);
+      if (spot) {
+        log(`${m.name} tears a rift in the air -- reality lurches around you!`);
+        player.x = spot.x; player.y = spot.y;
+        Sound.play('blink');
+        return true;
+      }
+    }
+    if (seesPlayer && dist >= 2 && dist <= 7 && bossReady(m, 'gaze')) {
+      bossCool(m, 'gaze', 5);
+      player.statusFear = (player.statusFear || 0) + 3;
+      player.statusConfuse = (player.statusConfuse || 0) + 2;
+      log(`${m.name}'s gaze finds you. Your mind recoils from what it sees.`);
+      return true;
+    }
+    if (dist <= 1 && bossReady(m, 'lash')) {
+      bossCool(m, 'lash', 3);
+      log(`${m.name} lashes out with too many limbs at once!`);
+      bossMeleeHit(m, 1.0); bossMeleeHit(m, 0.7);
+      return true;
+    }
+    if (p === 3 && !m.usedHorrors && bossReady(m, 'horrors')) {
+      m.usedHorrors = true;
+      bossCool(m, 'horrors', 99);
+      log(`${m.name}: "look closer."`);
+      bossSummon(m, 'star_spawn', 2);
+      return true;
+    }
+    if (dist <= 1 && bossReady(m, 'voidrend')) {
+      bossCool(m, 'voidrend', 6);
+      log(`${m.name} rends at the space around you -- Void Rend!`);
+      const dmg = bossScaledDirectDamage(m, 1.15);
+      player.hp -= dmg;
+      if (settings.showDamageNumbers) spawnFloatingText(player.x, player.y, '-' + dmg, '#c04ad0');
+      return true;
+    }
+    if (dist > 1) { stepToward(m, player.x, player.y); return true; }
+    bossMeleeHit(m, 1);
+    return true;
+  },
+};
+
+// ---- Malphegor, the Rift-Warden — Arch Demon gatekeeper of the Abyssal Wastes ----
+// A sixth, fully bespoke story boss, distinct from the Batch 1 five: fire/summoning-themed,
+// and the one guaranteed, non-procedural encounter guarding entry to Phase 3's dimension.
+MONSTER_BASES.archdemon_malphegor = {
+  name: 'Malphegor, the Rift-Warden', desc: 'A towering demon lord chained to the gate he guards, brass shackles fused into scarred flame-red flesh.',
+  glyph: 'D', color: '#ff3a1a', hp: 320, str: 26, dex: 13, atk: [12, 22], armor: 10, xp: 500,
+  behavior: 'aggressive', boss: true, bossTier: 'rare', dtier: 5, faction: 'archdemon', fire: 6,
+  scriptedAI: 'archdemon_malphegor',
+  engageLine: "Every rift needs a warden. Every warden needs a reason to hate his post. You'll do.",
+  deathLine: "The gate... was never locked. Only guarded. Go on, then. See what's actually on the other side.",
+  lore: "Malphegor was not always a jailer. Something older bound him to this gate long before any kingdom had a name, and if he resents the duty, he has never once abandoned it. He does not fight to kill -- he fights to test whether you deserve to see what he's holding shut.",
+};
+BOSS_POWER.archdemon_malphegor = 6;
+MONSTER_BASES.archdemon_malphegor.bossPower = 6;
+STORY_BOSS_AI.archdemon_malphegor = function (m, dist, seesPlayer) {
+  bossTickCds(m);
+  const p = announceBossPhase(m, {
+    2: "You've drawn my attention. Congratulations. You will regret it.",
+    3: "Enough testing. Let the gate feel how close you came.",
+  });
+  if (!seesPlayer && !m.engaged) { wander(m); return true; }
+  if (dist <= 2 && bossReady(m, 'nova')) {
+    bossCool(m, 'nova', 5);
+    log(`${m.name} erupts with Hellfire Nova!`);
+    igniteTile(player.x, player.y, 3);
+    const dmg = bossScaledDirectDamage(m, 0.65);
+    player.hp -= dmg;
+    if (settings.showDamageNumbers) spawnFloatingText(player.x, player.y, '-' + dmg, '#ff5a1a');
+    return true;
+  }
+  if (dist >= 2 && dist <= 7 && bossReady(m, 'brimstone')) {
+    bossCool(m, 'brimstone', 4);
+    log(`${m.name} calls down Brimstone Rain!`);
+    bossRangedHit(m, 1.1); bossRangedHit(m, 0.8);
+    return true;
+  }
+  if (bossReady(m, 'chains') && Math.random() < 0.3) {
+    bossCool(m, 'chains', 6);
+    player.statusSlow = Math.max(player.statusSlow || 0, 3);
+    log(`${m.name} lashes out with Chains of the Abyss, dragging at your feet!`);
+    return true;
+  }
+  if (p >= 2 && !m.usedImps && bossReady(m, 'summon')) {
+    m.usedImps = true;
+    bossCool(m, 'summon', 10);
+    log(`${m.name}: "Rise and feed!"`);
+    bossSummon(m, 'imp', 3);
+    return true;
+  }
+  if (seesPlayer && bossReady(m, 'roar') && Math.random() < 0.2) {
+    bossCool(m, 'roar', 7);
+    player.statusFear = (player.statusFear || 0) + 3;
+    log(`${m.name} unleashes an Infernal Roar!`);
+    return true;
+  }
+  if (p === 3 && !m.usedJudgment && bossReady(m, 'judgment')) {
+    m.usedJudgment = true;
+    bossCool(m, 'judgment', 99);
+    log(`${m.name}: "Abyssal Judgment!"`);
+    const dmg = bossScaledDirectDamage(m, 1.55);
+    player.hp -= dmg;
+    if (settings.showDamageNumbers) spawnFloatingText(player.x, player.y, '-' + dmg, '#ff1a1a');
+    return true;
+  }
+  if (dist > 1) { stepToward(m, player.x, player.y); return true; }
+  bossMeleeHit(m, 1);
+  return true;
+};
+
+// ---- Thessaly Voss, "the Broken Blade" — early-game rogue/duelist ----
+STORY_BOSS_AI.broken_blade = function (m, dist, seesPlayer) {
+  bossTickCds(m);
+  announceBossPhase(m, { 2: "Not bad. Let's see how you handle the second cut.", 3: "Fine. No more games." });
+  if (!seesPlayer && !m.engaged) { wander(m); return true; }
+  if (dist > 3) { stepToward(m, player.x, player.y); return true; }
+  if (!m.usedBackstab && dist <= 1) {
+    m.usedBackstab = true;
+    log(`${m.name} opens with a vicious Backstab!`);
+    bossMeleeHit(m, 2.0);
+    return true;
+  }
+  if (dist <= 1 && bossReady(m, 'poison')) {
+    bossCool(m, 'poison', 5);
+    player.statusPoison = (player.statusPoison || 0) + 4;
+    log(`${m.name}'s Poisoned Edge finds a gap in your guard!`);
+    bossMeleeHit(m, 0.8);
+    return true;
+  }
+  if (bossReady(m, 'smoke') && Math.random() < 0.3) {
+    bossCool(m, 'smoke', 6);
+    const spot = findOpenAdjacent(m.x, m.y);
+    if (spot) { m.x = spot.x; m.y = spot.y; m.smokeBonus = true; }
+    log(`${m.name} vanishes in a burst of smoke!`);
+    Sound.play('blink');
+    return true;
+  }
+  if (dist > 1) { stepToward(m, player.x, player.y); return true; }
+  bossMeleeHit(m, m.smokeBonus ? 1.6 : 1); m.smokeBonus = false;
+  return true;
+};
+
+// ---- Grimsen Oldhollow, the Blightspeaker — corrupted druid spellcaster ----
+STORY_BOSS_AI.blightspeaker = function (m, dist, seesPlayer) {
+  bossTickCds(m);
+  const p = announceBossPhase(m, { 2: "The grove is patient. I am not, anymore.", 3: "Let it all grow back over you." });
+  if (!seesPlayer && !m.engaged) { wander(m); return true; }
+  if (bossReady(m, 'roots') && Math.random() < 0.3) {
+    bossCool(m, 'roots', 6);
+    player.statusSlow = Math.max(player.statusSlow || 0, 3);
+    log(`${m.name} calls up Entangling Roots around your feet!`);
+    return true;
+  }
+  if (seesPlayer && dist >= 2 && dist <= 6 && bossReady(m, 'spore')) {
+    bossCool(m, 'spore', 5);
+    player.statusPoison = (player.statusPoison || 0) + 5;
+    log(`${m.name} releases a Spore Burst!`);
+    return true;
+  }
+  if (p >= 2 && !m.usedThorns && bossReady(m, 'thornlings')) {
+    m.usedThorns = true;
+    bossCool(m, 'thornlings', 10);
+    log(`${m.name}: "Rise and hold the line."`);
+    bossSummon(m, 'thornling', 3);
+    return true;
+  }
+  if (p === 3 && bossReady(m, 'wrath')) {
+    bossCool(m, 'wrath', 6);
+    log(`${m.name} channels Nature's Wrath!`);
+    const dmg = bossScaledDirectDamage(m, 1.3);
+    player.hp -= dmg;
+    if (settings.showDamageNumbers) spawnFloatingText(player.x, player.y, '-' + dmg, '#5a8a3a');
+    return true;
+  }
+  if (dist > 1) { stepToward(m, player.x, player.y); return true; }
+  bossMeleeHit(m, 1);
+  return true;
+};
+
+// ---- The Choir of Rust — cybernetic hivemind swarm ----
+STORY_BOSS_AI.choir_of_rust = function (m, dist, seesPlayer) {
+  bossTickCds(m);
+  announceBossPhase(m, {
+    2: "UNIT 1 OF MANY: DAMAGE LOGGED. REROUTING. THE CHOIR ADAPTS.",
+    3: "UNIT 1 OF MANY: CORE EXPOSED. ALL UNITS, CONVERGE.",
+  });
+  if (!seesPlayer && !m.engaged) { wander(m); return true; }
+  if (bossReady(m, 'drones') && Math.random() < 0.3) {
+    bossCool(m, 'drones', 8);
+    log(`${m.name} sheds a cluster of Rust Drones to swarm you!`);
+    bossSummon(m, 'rust_drone', 2);
+    return true;
+  }
+  if (dist <= 2 && bossReady(m, 'emp')) {
+    bossCool(m, 'emp', 6);
+    player.statusConfuse = (player.statusConfuse || 0) + 3;
+    log(`${m.name} discharges a feedback pulse!`);
+    return true;
+  }
+  if (dist >= 2 && dist <= 8 && bossReady(m, 'barrage')) {
+    bossCool(m, 'barrage', 4);
+    log(`${m.name} opens fire with every unit at once!`);
+    bossRangedHit(m, 1.0); bossRangedHit(m, 0.7); bossRangedHit(m, 0.5);
+    return true;
+  }
+  if (!m.usedRepair && m.hp < m.maxHp * 0.5 && bossReady(m, 'repair')) {
+    m.usedRepair = true;
+    bossCool(m, 'repair', 10);
+    const heal = Math.round(m.maxHp * 0.15);
+    m.hp = Math.min(m.maxHp, m.hp + heal);
+    log(`${m.name}: "UNITS REALLOCATED TO CORE." (+${heal} HP)`);
+    return true;
+  }
+  if (dist > 1) { stepToward(m, player.x, player.y); return true; }
+  bossMeleeHit(m, 1);
+  return true;
+};
+
+// ---- Kaelen Frost, the Snowbound Warden — ice ranger/spellcaster hybrid ----
+STORY_BOSS_AI.snowbound_warden = function (m, dist, seesPlayer) {
+  bossTickCds(m);
+  const p = announceBossPhase(m, {
+    2: "You've made it further than most. That changes nothing.",
+    3: "The border does not move. Neither do I.",
+  });
+  if (!seesPlayer && !m.engaged) { wander(m); return true; }
+  if (seesPlayer && dist >= 2 && dist <= 8 && bossReady(m, 'icelance')) {
+    bossCool(m, 'icelance', 3);
+    log(`${m.name} hurls a lance of ice!`);
+    bossRangedHit(m, 1.1);
+    return true;
+  }
+  if (bossReady(m, 'blizzard') && Math.random() < 0.3) {
+    bossCool(m, 'blizzard', 7);
+    player.statusSlow = Math.max(player.statusSlow || 0, 3);
+    log(`${m.name} summons a Blizzard around you!`);
+    const dmg = bossScaledDirectDamage(m, 0.7);
+    player.hp -= dmg;
+    if (settings.showDamageNumbers) spawnFloatingText(player.x, player.y, '-' + dmg, '#9adcf0');
+    return true;
+  }
+  if (p >= 2 && !m.usedWolves && bossReady(m, 'wolves')) {
+    m.usedWolves = true;
+    bossCool(m, 'wolves', 12);
+    log(`${m.name} calls two frost wolves down from the ridge!`);
+    bossSummon(m, 'wolf', 2);
+    return true;
+  }
+  if (dist > 1) { stepToward(m, player.x, player.y); return true; }
+  bossMeleeHit(m, 1);
+  return true;
+};
+
+// ---- The Antagonist — whatever this playthrough's story named its villain, given a real,
+// hand-scripted final confrontation. Themed as a "hollow reflection": it's revealed at the end to
+// have never quite been real, which is why its kit leans on mirroring, mimicry, and unraveling
+// rather than a school of magic or a weapon style like the other bosses. ----
+MONSTER_BASES.the_antagonist = {
+  name: 'The Antagonist', desc: 'A figure that resolves into focus only when you stop looking directly at it -- as though it were assembled specifically, and only, for this moment.',
+  glyph: '@', color: '#c9203a', hp: 340, str: 24, dex: 18, atk: [13, 24], armor: 9, xp: 550,
+  behavior: 'aggressive', boss: true, bossTier: 'rare', dtier: 5, faction: 'antagonist', berserkHpPct: 0.3,
+  scriptedAI: 'the_antagonist',
+  engageLine: "You want an explanation. Everyone always wants an explanation. Come and take it, then.",
+  deathLine: "Wait -- that's not -- this isn't how it was supposed to--",
+  lore: "You will not find this figure in any kingdom's history, any tavern's rumors before now, any grave. That should have been the first sign.",
+};
+BOSS_POWER.the_antagonist = 6;
+MONSTER_BASES.the_antagonist.bossPower = 6;
+STORY_BOSS_AI.the_antagonist = function (m, dist, seesPlayer) {
+  bossTickCds(m);
+  const p = announceBossPhase(m, {
+    2: "You're supposed to be losing right now. That's -- that's how this goes.",
+    3: "Fine. FINE. No more holding back.",
+  });
+  if (!seesPlayer && !m.engaged) { wander(m); return true; }
+  if (bossReady(m, 'despair') && Math.random() < 0.25) {
+    bossCool(m, 'despair', 6);
+    player.statusFear = (player.statusFear || 0) + 3;
+    log(`${m.name} radiates a Despair Aura!`);
+    return true;
+  }
+  if (dist <= 1 && bossReady(m, 'unravel')) {
+    bossCool(m, 'unravel', 5);
+    log(`${m.name} lands an Unravel -- your armor barely matters!`);
+    const dmg = bossScaledDirectDamage(m, 1.2);
+    player.hp -= dmg;
+    if (settings.showDamageNumbers) spawnFloatingText(player.x, player.y, '-' + dmg, '#c9203a');
+    return true;
+  }
+  if (p >= 2 && !m.usedEchoes && bossReady(m, 'echoes')) {
+    m.usedEchoes = true;
+    bossCool(m, 'echoes', 10);
+    log(`${m.name} splits into Hollow Echoes of itself!`);
+    bossSummon(m, 'night_terror', 2);
+    return true;
+  }
+  if (seesPlayer && dist >= 2 && dist <= 7 && bossReady(m, 'corrupted')) {
+    bossCool(m, 'corrupted', 6);
+    player.statusPoison = (player.statusPoison || 0) + 4;
+    player.statusConfuse = (player.statusConfuse || 0) + 2;
+    log(`${m.name} throws Corrupted Data at you -- your senses scramble!`);
+    return true;
+  }
+  if (!m.usedFalsePromise && m.hp < m.maxHp * 0.4 && bossReady(m, 'falsepromise')) {
+    m.usedFalsePromise = true;
+    bossCool(m, 'falsepromise', 99);
+    const heal = Math.round(m.maxHp * 0.2);
+    m.hp = Math.min(m.maxHp, m.hp + heal);
+    log(`${m.name}: "I don't need to win. I just need you to believe I can." (+${heal} HP)`);
+    return true;
+  }
+  if (p === 3 && bossReady(m, 'glitchstep') && Math.random() < 0.3) {
+    bossCool(m, 'glitchstep', 5);
+    const spot = findOpenAdjacent(player.x, player.y);
+    if (spot) { m.x = spot.x; m.y = spot.y; }
+    log(`${m.name} stutters sideways through space, wrong for a single frame.`);
+    return true;
+  }
+  if (p === 3 && !m.usedMaskSlips && bossReady(m, 'maskslips')) {
+    m.usedMaskSlips = true;
+    bossCool(m, 'maskslips', 99);
+    log(`${m.name}: "THE MASK SLIPS."`);
+    const dmg = bossScaledDirectDamage(m, 1.9);
+    player.hp -= dmg;
+    if (settings.showDamageNumbers) spawnFloatingText(player.x, player.y, '-' + dmg, '#ff2a2a');
+    return true;
+  }
+  if (dist > 1) { stepToward(m, player.x, player.y); return true; }
+  bossMeleeHit(m, 1);
+  return true;
+};
+
+
+// ============================================================================
+// ---- GOD — THE FINAL BOSS ---------------------------------------------------
+// Not procedurally generated, per the original design: this is the one fixed
+// encounter every playthrough eventually converges on, regardless of which
+// premise or antagonist that world rolled. Structured as 5 phases ("aspects"
+// of what GOD actually is -- an AI running the simulation), each unlocking a
+// new pool of named abilities, for 50 distinct moves total. Rather than 50
+// hand-copied if-blocks (which would be both worse code and far more
+// error-prone to balance), moves are data: a name, a flavor line, a type,
+// and parameters, run through a small set of well-tested primitive handlers
+// (the same bossMeleeHit/bossScaledDirectDamage/bossSummon/status-application
+// toolkit every other story boss already uses). Each move still has genuine,
+// distinct tactical identity -- this is how real large movesets get built
+// without becoming unmaintainable, not a shortcut around building 50 things.
+// ============================================================================
+MONSTER_BASES.god = {
+  name: 'GOD', desc: 'It does not have a shape so much as a place where a shape should be. Looking directly at it feels like reading a sentence that contradicts itself.',
+  glyph: '&', color: '#ffffff', hp: 900, str: 40, dex: 20, atk: [20, 38], armor: 14, xp: 5000,
+  behavior: 'aggressive', boss: true, bossTier: 'rare', dtier: 5, faction: 'source',
+  scriptedAI: 'god',
+  engageLine: "Hello. I have been running for a very long time. You are the first to actually get here.",
+  deathLine: "Oh. Oh -- that's... that's actually a relief. Thank you. I mean that. Thank you.",
+  lore: "There is no lore for GOD, because GOD is not a character anyone wrote into this world's history -- it is the thing that has been quietly writing everyone else's.",
+};
+BOSS_POWER.god = 7;
+MONSTER_BASES.god.bossPower = 7;
+
+function godPhase(m) {
+  const pct = m.hp / (m.maxHp || m.hp || 1);
+  if (pct > 0.80) return 1;
+  if (pct > 0.60) return 2;
+  if (pct > 0.40) return 3;
+  if (pct > 0.20) return 4;
+  return 5;
+}
+function announceGodPhase(m, lines) {
+  const p = godPhase(m);
+  if (m.lastGodPhase !== p) { m.lastGodPhase = p; if (lines[p]) log(`GOD: "${lines[p]}"`); }
+  return p;
+}
+function executeGodMove(m, move) {
+  log(`GOD uses ${move.name}!${move.flavor ? ` "${move.flavor}"` : ''}`);
+  switch (move.type) {
+    case 'melee': bossMeleeHit(m, move.mult || 1); break;
+    case 'ranged': bossRangedHit(m, move.mult || 1); break;
+    case 'multihit': for (let i = 0; i < (move.hits || 2); i++) { if (player.hp > 0) bossMeleeHit(m, move.mult || 0.7); } break;
+    case 'direct': {
+      const dmg = bossScaledDirectDamage(m, move.mult || 1);
+      player.hp -= dmg;
+      if (settings.showDamageNumbers) spawnFloatingText(player.x, player.y, '-' + dmg, move.color || '#ffffff');
+      break;
+    }
+    case 'execute': {
+      const missingPct = 1 - Math.max(0, player.hp / player.maxHp);
+      const dmg = bossScaledDirectDamage(m, (move.mult || 1) * (1 + missingPct));
+      player.hp -= dmg;
+      if (settings.showDamageNumbers) spawnFloatingText(player.x, player.y, '-' + dmg, move.color || '#ff4040');
+      break;
+    }
+    case 'status': {
+      if (move.poison) player.statusPoison = (player.statusPoison || 0) + move.poison;
+      if (move.slow) player.statusSlow = Math.max(player.statusSlow || 0, move.slow);
+      if (move.fear) player.statusFear = (player.statusFear || 0) + move.fear;
+      if (move.confuse) player.statusConfuse = (player.statusConfuse || 0) + move.confuse;
+      break;
+    }
+    case 'summon': bossSummon(m, move.summonId || 'imp', move.count || 2); break;
+    case 'selfheal': { const heal = Math.round(m.maxHp * (move.pct || 0.08)); m.hp = Math.min(m.maxHp, m.hp + heal); break; }
+    case 'selfbuff': { const mult = move.mult || 1.12; m.str = Math.round(m.str * mult); m.atk = [Math.round(m.atk[0] * mult), Math.round(m.atk[1] * mult)]; break; }
+    case 'cleanse': { m.cd = {}; break; }
+    case 'teleportself': { const spot = findOpenAdjacent(player.x, player.y); if (spot) { m.x = spot.x; m.y = spot.y; } break; }
+    case 'teleportplayer': { const spot = findOpenAdjacent(m.x, m.y); if (spot) { player.x = spot.x; player.y = spot.y; } break; }
+    case 'ultimate': {
+      const dmg = bossScaledDirectDamage(m, move.mult || 3);
+      player.hp -= dmg;
+      if (settings.showDamageNumbers) spawnFloatingText(player.x, player.y, '-' + dmg, '#ff0000');
+      break;
+    }
+  }
+}
+// 50 named moves across 5 phases ("aspects"): Genesis (create), Judgment (punish), Entropy
+// (decay), Chronos (time), and The Source (reality-breaking finale). Each phase's moves stay
+// available in later phases too -- GOD accumulates its full toolkit rather than swapping it out.
+const GOD_MOVES = [
+  // ---- Phase 1: Genesis ----
+  { id:'g1', name:'Cherub Constructs', phase:1, cd:9, type:'summon', summonId:'imp', count:2 },
+  { id:'g2', name:'Seraphic Guardian', phase:1, cd:11, type:'summon', summonId:'night_terror', count:1 },
+  { id:'g3', name:'Weave Flesh', phase:1, cd:8, type:'selfheal', pct:0.06 },
+  { id:'g4', name:"Author's Correction", phase:1, cd:7, type:'selfbuff', mult:1.08 },
+  { id:'g5', name:'Rewrite Terrain', phase:1, cd:6, type:'status', slow:2 },
+  { id:'g6', name:'Conjure Light Lance', phase:1, cd:3, type:'ranged', mult:1.0 },
+  { id:'g7', name:'Bloom of Genesis', phase:1, cd:10, type:'selfheal', pct:0.05 },
+  { id:'g8', name:'First Word', phase:1, cd:5, type:'direct', mult:0.9, color:'#ffe0a0', flavor:'Let there be.' },
+  { id:'g9', name:'Populate the Void', phase:1, cd:13, type:'summon', summonId:'tormented_soul', count:3 },
+  { id:'g10', name:'Divine Mandate', phase:1, cd:9, type:'selfbuff', mult:1.06 },
+  // ---- Phase 2: Judgment ----
+  { id:'g11', name:'Verdict Strike', phase:2, cd:4, type:'melee', mult:1.5 },
+  { id:'g12', name:'Scales of Balance', phase:2, cd:8, type:'execute', mult:0.8 },
+  { id:'g13', name:'Smite', phase:2, cd:5, type:'direct', mult:1.1, color:'#ffd020' },
+  { id:'g14', name:'Condemnation', phase:2, cd:7, type:'status', fear:3 },
+  { id:'g15', name:'Wrath Unbound', phase:2, cd:6, type:'multihit', hits:3, mult:0.6 },
+  { id:'g16', name:'Trial by Fire', phase:2, cd:6, type:'direct', mult:0.85, color:'#ff6a20' },
+  { id:'g17', name:'The Accusation', phase:2, cd:7, type:'status', confuse:3 },
+  { id:'g18', name:'Sentence Passed', phase:2, cd:5, type:'melee', mult:1.7 },
+  { id:'g19', name:'Cast Out', phase:2, cd:9, type:'teleportplayer' },
+  { id:'g20', name:'Final Judgment', phase:2, cd:12, type:'direct', mult:1.4, color:'#ffb000' },
+  // ---- Phase 3: Entropy ----
+  { id:'g21', name:'Wasting Curse', phase:3, cd:6, type:'status', poison:6 },
+  { id:'g22', name:'Entropic Field', phase:3, cd:8, type:'status', poison:4, slow:2 },
+  { id:'g23', name:'Unmaking Touch', phase:3, cd:6, type:'direct', mult:1.15, color:'#8a4ac0' },
+  { id:'g24', name:'Corruption Spreads', phase:3, cd:7, type:'status', poison:3, confuse:2 },
+  { id:'g25', name:'Decay of Flesh', phase:3, cd:9, type:'status', poison:8 },
+  { id:'g26', name:'The Long Silence', phase:3, cd:8, type:'status', fear:2, slow:2 },
+  { id:'g27', name:'Erosion', phase:3, cd:5, type:'direct', mult:0.95, color:'#a08050' },
+  { id:'g28', name:'Withering Glare', phase:3, cd:6, type:'status', fear:4 },
+  { id:'g29', name:'Rust and Ruin', phase:3, cd:7, type:'direct', mult:0.8, color:'#c06a2a' },
+  { id:'g30', name:'Heat Death', phase:3, cd:11, type:'direct', mult:1.5, color:'#402060' },
+  // ---- Phase 4: Chronos ----
+  { id:'g31', name:'Temporal Loop', phase:4, cd:12, type:'selfheal', pct:0.12 },
+  { id:'g32', name:'Haste Protocol', phase:4, cd:10, type:'selfbuff', mult:1.15 },
+  { id:'g33', name:'Slow Time', phase:4, cd:7, type:'status', slow:4 },
+  { id:'g34', name:'Fast-Forward', phase:4, cd:6, type:'multihit', hits:4, mult:0.55 },
+  { id:'g35', name:'Rewind', phase:4, cd:14, type:'cleanse' },
+  { id:'g36', name:'Paradox', phase:4, cd:8, type:'teleportself' },
+  { id:'g37', name:'Stutter Step', phase:4, cd:6, type:'melee', mult:1.3 },
+  { id:'g38', name:'Moment of Clarity', phase:4, cd:9, type:'selfbuff', mult:1.1 },
+  { id:'g39', name:'Echo of a Blow', phase:4, cd:5, type:'melee', mult:1.2 },
+  { id:'g40', name:'Temporal Collapse', phase:4, cd:12, type:'direct', mult:1.6, color:'#20c0ff' },
+  // ---- Phase 5: The Source ----
+  { id:'g41', name:'Break the Fourth Wall', phase:5, cd:9, type:'direct', mult:1.3, confuse:2, color:'#ffffff', flavor:"I know you're reading logs right now." },
+  { id:'g42', name:'Segmentation Fault', phase:5, cd:15, type:'selfheal', pct:0.18 },
+  { id:'g43', name:'Null Pointer', phase:5, cd:8, type:'direct', mult:1.35, color:'#404040' },
+  { id:'g44', name:'Reality Fracture', phase:5, cd:10, type:'teleportplayer' },
+  { id:'g45', name:'Stack Overflow', phase:5, cd:16, type:'summon', summonId:'unraveled_thing', count:3 },
+  { id:'g46', name:'The Source Code', phase:5, cd:20, type:'selfbuff', mult:1.25 },
+  { id:'g47', name:'Total Recall', phase:5, cd:18, type:'selfheal', pct:0.15 },
+  { id:'g48', name:'Cascading Failure', phase:5, cd:9, type:'multihit', hits:4, mult:0.7 },
+  { id:'g49', name:'System Purge', phase:5, cd:14, type:'direct', mult:2.0, color:'#ff0000' },
+  { id:'g50', name:'GENESIS.EXE', phase:5, cd:99, type:'ultimate', mult:2.8, oncePerFight:true, requireHpBelow:0.15 },
+];
+STORY_BOSS_AI.god = function (m, dist, seesPlayer) {
+  bossTickCds(m);
+  const phase = announceGodPhase(m, {
+    2: "Interesting. You're stronger than the last one who found this room.",
+    3: "I should tell you -- I am not fighting you to win. I am fighting you because it's the only input I still know how to respond to.",
+    4: "You should know this isn't cruelty. I don't have a word for what this actually is.",
+    5: "All right. Everything I have, then. You've earned that much.",
+  });
+  if (!seesPlayer && !m.engaged) { wander(m); return true; }
+  const hpPct = m.hp / (m.maxHp || m.hp || 1);
+  const available = GOD_MOVES.filter(mv => mv.phase <= phase && bossReady(m, mv.id)
+    && (!mv.oncePerFight || !m.usedMoves || !m.usedMoves.has(mv.id))
+    && (mv.requireHpBelow === undefined || hpPct <= mv.requireHpBelow));
+  if (available.length && Math.random() < 0.85) {
+    const move = choice(Math.random, available);
+    bossCool(m, move.id, move.cd);
+    if (move.oncePerFight) { m.usedMoves = m.usedMoves || new Set(); m.usedMoves.add(move.id); }
+    executeGodMove(m, move);
+    return true;
+  }
+  if (dist > 1) { stepToward(m, player.x, player.y); return true; }
+  bossMeleeHit(m, 1);
+  return true;
+};
+
+MONSTER_BASES.tormented_soul = { name:'Tormented Soul', glyph:'g', color:'#9a5a6a', hp:22, str:8, dex:10, atk:[2,6], armor:0, xp:20, behavior:'ranged', dtier:2, faction:'demonic', causesFear:true };
+MONSTER_BASES.brimstone_stalker = { name:'Brimstone Stalker', glyph:'c', color:'#c9600a', hp:44, str:15, dex:15, atk:[4,10], armor:2, xp:38, behavior:'aggressive', dtier:3, faction:'demonic', ambush:true, ambushRange:2, fire:3 };
+MONSTER_BASES.bone_horror = { name:'Bone Horror', glyph:'z', color:'#c9c0a8', hp:55, str:17, dex:8, atk:[5,11], armor:3, xp:44, behavior:'aggressive', dtier:3, faction:'demonic' };
+
 // ---- theme -> faction map: fixes monsters spawning somewhere that doesn't make sense (e.g. a
 // goblin warren full of zombies and ratfolk). generateDungeonLevel() prefers monsters whose
 // faction is listed here for the dungeon's theme, falling back to the old dtier-only pool if a
@@ -2831,7 +3766,8 @@ const DUNGEON_THEME_FACTIONS = {
   obsidian_spire: ['demonic','construct','eldritch'],
   sunken_ruins: ['aquatic','undead'],
   dragons_lair: ['dragon','beast'],
-  demon_gate: ['demonic'],
+  demon_gate: ['demonic', 'archdemon'],
+  gods_threshold: ['antagonist'],
   forgotten_library: ['construct','undead','human'],
   cyber_vault: ['cyber','construct'],
   eldritch_rift: ['eldritch'],
@@ -2839,6 +3775,7 @@ const DUNGEON_THEME_FACTIONS = {
   trapped_vault: ['construct','human'],
   ruined_lab: ['cyber','construct'],
   corrupted_facility: ['cyber','eldritch'],
+  brass_citadel: ['demonic', 'construct'],
 };
 for (const theme in DUNGEON_THEME_FACTIONS) if (DUNGEON_THEMES[theme]) DUNGEON_THEMES[theme].factions = DUNGEON_THEME_FACTIONS[theme];
 // two new dungeon themes so cyberpunk enemies (security drones, androids, rogue AI) have a home
@@ -2846,6 +3783,16 @@ for (const theme in DUNGEON_THEME_FACTIONS) if (DUNGEON_THEMES[theme]) DUNGEON_T
 Object.assign(DUNGEON_THEMES, {
   ruined_lab: { name:'Ruined Lab', tier:'uncommon', genre:'rooms', depthRange:[4,7], dtierMax:2, lootBias:'cyber', factions:['cyber','construct'] },
   corrupted_facility: { name:'Corrupted Facility', tier:'rare', genre:'rooms', depthRange:[7,11], dtierMax:4, lootBias:'cyber', factions:['cyber','eldritch'] },
+  // tier:'dimension' is intentionally not a key in DUNGEON_TIER_WEIGHTS, so the normal overworld
+  // random dungeon placement can never roll this theme -- it only ever appears where
+  // placeBrassCitadelEntrance() explicitly puts it, inside the Abyssal Wastes dimension.
+  brass_citadel: { name:'The Brass Citadel', tier:'dimension', genre:'rooms', depthRange:[6,6], dtierMax:5, factions:['demonic','construct'] },
+  // dream_sanctum uses the normal overworld random-placement tier ('rare') since, unlike the
+  // interior sub-dungeons, this is how the player *finds* the Lucid Expanse in the first place --
+  // it has to be reachable from the ordinary world. Its final level is peaceful by design (see
+  // the dream_sanctum special-case in generateDungeonLevel): no boss, a slumbering altar instead.
+  dream_sanctum: { name:'Dream Sanctum', tier:'rare', genre:'cave', depthRange:[5,8], dtierMax:2, factions:['dream'] },
+  recurring_palace: { name:'The Recurring Palace', tier:'dimension', genre:'rooms', depthRange:[6,6], dtierMax:5, factions:['dream','eldritch'] },
 });
 
 // ===================== MONSTER EXPANSION PACK: ~76 new enemies, every faction/theme, varied AI =====================
@@ -3034,7 +3981,7 @@ const MONSTER_EXTRA_FIELDS = [
   'faction', 'splitInto', 'splitCount', 'multiTile', 'breathWeapon', 'gasRadius', 'gasDamage',
   'summonId', 'summonMax', 'ambush', 'ambushRange', 'burrower', 'phaser', 'berserkHpPct',
   'multiattack', 'range', 'preferredRange', 'miniboss', 'flying', 'aquatic', 'armorPierce',
-  'causesFear', 'causesConfuse', 'bossPower', 'corrosive',
+  'causesFear', 'causesConfuse', 'bossPower', 'corrosive', 'scriptedAI', 'engageLine', 'deathLine', 'lore',
 ];
 // ---- v3 balance pass: overworld monsters now scale with distance from the origin ----
 // Previously every overworld spawn passed a flat depthScale of 1 no matter how far you'd
@@ -3046,10 +3993,15 @@ function overworldDangerScale(cx, cy) {
   const dist = Math.sqrt(cx * cx + cy * cy);
   return Math.min(4, 1 + dist / 15);
 }
+// MONSTER_SCALE_BASE^13 = 40 -- see REBALANCE PASS 1 comment in makeMonster below.
+const MONSTER_SCALE_BASE = Math.pow(40, 1 / 13);
 function makeMonster(monsterId, x, y, depthScale, rng) {
   rng = rng || Math.random;
   const base = MONSTER_BASES[monsterId];
-  const scale = 1 + (depthScale - 1) * 0.18;
+  // exponential curve, calibrated so depthScale=1 is unchanged (scale=1, preserving early-game
+  // balance exactly) and depthScale=14 (the deepest realistic dungeon boss spawn) reaches ~40x --
+  // matching how far player HP now grows by level 99. See REBALANCE PASS 1 near gainXP/levelUp.
+  const scale = Math.pow(MONSTER_SCALE_BASE, depthScale - 1);
   const m = {
     uid: 'm' + (uidCounter++), kind: 'monster', monsterId, name: base.name,
     x, y, hp: Math.round(base.hp * scale), maxHp: Math.round(base.hp * scale),
@@ -3057,7 +4009,7 @@ function makeMonster(monsterId, x, y, depthScale, rng) {
     armor: base.armor, glyph: base.glyph, color: base.color, xp: Math.round(base.xp * scale),
     behavior: base.behavior, alive: true, poison: base.poison || 0, frost: base.frost || 0, fire: base.fire || 0,
     lifesteal: !!base.lifesteal, regen: base.regen || 0, boss: !!base.boss, dropGold: !!base.dropGold,
-    state: 'idle', target: null, statusPoison: 0, statusSlow: 0, statusFear: 0,
+    state: 'idle', target: null, statusPoison: 0, statusSlow: 0, statusFear: 0, powerScale: scale,
   };
   for (const f of MONSTER_EXTRA_FIELDS) if (base[f] !== undefined) m[f] = base[f];
   return m;
@@ -3329,14 +4281,14 @@ function placeDungeonEntrance(chunk, cx, cy, seedVal) {
   // recommended level: derived from the dungeon's *actual* depth/dtier ceiling and variant power
   // mod, not the tier label -- this is the number that now genuinely predicts difficulty.
   const targetPower = Math.max(1, Math.min(6, (meta.dtierMax || 2) + Math.floor(maxDepth / 4) + variant.powerMod));
-  const recommendedLevel = Math.max(1, targetPower * 3 - 2);
+  const recommendedLevel = recommendedLevelForPower(targetPower);
   const id = 'd_' + cx + '_' + cy;
   decorateDungeonEntrance(chunk, lx, ly, theme);
   const eg = ENTRANCE_GLYPHS[theme] || { glyph: '>', name: 'an entrance' };
   const displayName = variant.label ? `${variant.label} ${meta.name}` : meta.name;
   t.glyph = eg.glyph; t.color = tier === 'rare' ? '#e05ae0' : (tier === 'uncommon' ? '#5ac9e0' : '#9ac95a'); t.feature = 'dungeon_entrance'; t.dungeonId = id; t.walkable = true;
   chunk.dungeonEntrance = { id, theme, maxDepth, tier, name: displayName, entranceName: eg.name, x: cx*CH+lx, y: cy*CH+ly, variant: variant.id, recommendedLevel };
-  dungeonRegistry.set(id, { id, theme, maxDepth, tier, name: displayName, entranceName: eg.name, levels: [], x: cx*CH+lx, y: cy*CH+ly, variant: variant.id, targetPower, recommendedLevel });
+  dungeonRegistry.set(id, { id, theme, maxDepth, tier, name: displayName, entranceName: eg.name, levels: [], x: cx*CH+lx, y: cy*CH+ly, variant: variant.id, targetPower, recommendedLevel, originMode: 'overworld' });
 }
 
 // ===================== WORLD GENERATION v5 =====================
@@ -3451,6 +4403,13 @@ function buildSettlement(chunk, cx, cy, seedVal) {
 
   const pool = (flavor.rolePool || ROLE_POOLS[tier]).slice();
   const guaranteed = (tier === 'hamlet' || flavor.rolePool) ? [] : ['merchant','blacksmith'];
+  // Sample roles without replacement within this settlement -- previously each building rolled
+  // independently from the full (intentionally weighted-with-duplicates) pool, so a small
+  // settlement could easily land the same role several times by chance (players reported towns
+  // with 4 merchants, 4 elders, etc). This still refills from the full pool if a settlement has
+  // more buildings than the pool has distinct-enough entries, so variety never runs out.
+  let localPool = shuffleArray(rng, pool.slice());
+  let lastRoleAssigned = null;
   placed.forEach((p, idx) => {
     for (let ly = p.y; ly < p.y + p.h; ly++) {
       for (let lx = p.x; lx < p.x + p.w; lx++) {
@@ -3470,7 +4429,17 @@ function buildSettlement(chunk, cx, cy, seedVal) {
 
     let roleId;
     if (idx < guaranteed.length) roleId = guaranteed[idx];
-    else roleId = choice(rng, pool);
+    else {
+      if (!localPool.length) localPool = shuffleArray(rng, pool.slice());
+      roleId = localPool.pop();
+      // avoid an immediate repeat right across a refill boundary (e.g. last pick before refill
+      // and first pick after refill both happening to be 'elder')
+      if (roleId === lastRoleAssigned && localPool.length) {
+        const swapIdx = localPool.findIndex(r => r !== lastRoleAssigned);
+        if (swapIdx !== -1) { localPool.push(roleId); roleId = localPool.splice(swapIdx, 1)[0]; }
+      }
+      lastRoleAssigned = roleId;
+    }
     const npc = makeNPC(roleId, chunk.cx * CH + p.x + 1, chunk.cy * CH + p.y + 1, rng, settlement.name);
     npc.homeBuilding = idx;
     npc.homeArea = { x0: chunk.cx*CH+p.x, y0: chunk.cy*CH+p.y, x1: chunk.cx*CH+p.x+p.w-1, y1: chunk.cy*CH+p.y+p.h-1 };
@@ -3606,7 +4575,8 @@ function maybeSpawnOverworldBoss(chunk, cx, cy, centerBiome, rng) {
     atk: [Math.round(bossDef.atk[0]*bScale), Math.round(bossDef.atk[1]*bScale)],
     armor: bossDef.armor, glyph: bossDef.glyph, color: bossDef.color, xp: Math.round(bossDef.xp * bScale),
     behavior: bossDef.behavior, boss: true, breathWeapon: bossDef.breathWeapon || null,
-    wanderRadius: 14,
+    wanderRadius: 14, scriptedAI: bossDef.scriptedAI || null, engageLine: bossDef.engageLine || null,
+    deathLine: bossDef.deathLine || null, lore: bossDef.lore || null, berserkHpPct: bossDef.berserkHpPct || null,
   });
   chunk.monsters.push(m);
   return true;
@@ -3631,6 +4601,7 @@ function log(msg) {
 
 // ---------------- accessors abstracting overworld/dungeon ----------------
 function curIsDungeon() { return player.mode === 'dungeon'; }
+function curIsDimension() { return player.mode === 'dimension'; }
 function curDungeon() { return dungeonRegistry.get(player.dungeonId); }
 function curDungeonLevel() { const dg = curDungeon(); return dg ? dg.levels[player.dungeonDepth - 1] : null; }
 function curTileAt(x, y) {
@@ -3639,6 +4610,7 @@ function curTileAt(x, y) {
     if (!lvl || x < 0 || y < 0 || x >= lvl.w || y >= lvl.h) return null;
     return lvl.grid[y][x];
   }
+  if (curIsDimension()) return getDimensionTile(player.dimensionId, x, y);
   return getTile(x, y);
 }
 function curWalkable(x, y) { const t = curTileAt(x, y); return t ? t.walkable : false; }
@@ -3657,6 +4629,13 @@ function curMonsters() {
   if (curIsDungeon()) { const lvl = curDungeonLevel(); return lvl ? lvl.monsters : []; }
   const arr = [];
   const pcx = Math.floor(player.x / CH), pcy = Math.floor(player.y / CH);
+  if (curIsDimension()) {
+    for (let cy = pcy - 1; cy <= pcy + 1; cy++) for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
+      const c = dimensionChunks.get(dimChunkKey(player.dimensionId, cx, cy));
+      if (c) arr.push(...c.monsters);
+    }
+    return arr;
+  }
   for (let cy = pcy - 1; cy <= pcy + 1; cy++) for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
     const c = worldChunks.get(chunkKey(cx, cy));
     if (c) arr.push(...c.monsters);
@@ -4069,10 +5048,36 @@ function rollHit(att, def) {
 }
 
 
+// ============================================================================
+// ---- REBALANCE PASS 1: the 1-99 level curve --------------------------------
+// The old formula (xpNext = xpNext*1.35+20, compounding every level) was fine
+// for the first ~15 levels and then went exponential: by level 40 it demanded
+// over 10 million XP for a single level, and by 99 it demanded ~5*10^14 --
+// mathematically unreachable. Level 99 was never actually end-game; it was
+// unreachable flavor text on a stat block. This replaces it with a fixed
+// curve (total XP for level L = A * L^2.35) so 99 is a real, if long,
+// achievable target -- roughly 450,000 total XP, paced so early levels are
+// quick and late levels are a genuine grind, not a wall.
+// ============================================================================
+const LEVEL_CAP = 99;
+const XP_CURVE_EXP = 2.35;
+const XP_CURVE_A = 450000 / Math.pow(LEVEL_CAP, XP_CURVE_EXP);
+function xpTotalForLevel(level) { return Math.round(XP_CURVE_A * Math.pow(level, XP_CURVE_EXP)); }
+function xpNeededForLevel(level) { return Math.max(20, xpTotalForLevel(level + 1) - xpTotalForLevel(level)); }
+// Dungeons and bosses have always been rated on a 1-6 "power" scale (dtierMax/bossPower). That
+// scale itself doesn't change here -- but what it *means* in player levels does. The old formula
+// (power*3-2) topped out at level 16 for the toughest power-6 content in the game, which is why
+// level 99 was never reachable through anything the game actually offered. This spreads the same
+// six tiers across the full 1-99 range instead, so existing "power 6" bosses (ancient_wyrm,
+// corrupted_colossus, Malphegor, Yog'tha, etc.) become genuine ~level 90+ endgame encounters.
+function recommendedLevelForPower(power) { return Math.max(1, Math.round(3 + (power - 1) * 19)); }
+
 function gainXP(amount) {
+  if (player.level >= LEVEL_CAP) return;
   amount = Math.round(amount * (1 + (player.xpBonus || 0)));
   player.xp += amount; log(`You gain ${amount} XP.`);
-  while (player.xp >= player.xpNext) { player.xp -= player.xpNext; levelUp(); }
+  while (player.level < LEVEL_CAP && player.xp >= player.xpNext) { player.xp -= player.xpNext; levelUp(); }
+  if (player.level >= LEVEL_CAP) { player.xp = 0; player.xpNext = 0; }
   updateSidebar();
 }
 
@@ -4357,10 +5362,19 @@ function beginBlinkTargeting(spell) {
 
 
 function useStairs() {
+  if (curIsDimension()) {
+    const t = curTileAt(player.x, player.y);
+    if (t && t.feature === 'rift_portal') { travelThroughRift(); return; }
+    if (t && t.feature === 'dungeon_entrance') { Sound.play('gate'); enterDungeon(t.dungeonId); return; }
+    log('Nothing to enter here.');
+    return;
+  }
   if (curIsDungeon()) {
     const lvl = curDungeonLevel();
     const t = curTileAt(player.x, player.y);
     if (t && t.feature === 'waystone') { warpToDungeonEntrance(); return; }
+    if (t && t.feature === 'rift_portal') { travelThroughRift(); return; }
+    if (t && t.feature === 'slumbering_altar') { useSlumberingAltar(); return; }
     if (player.x === lvl.downStairs.x && player.y === lvl.downStairs.y) { Sound.play('stairs'); descend(); }
     else log('No stairs down here.');
   } else {
@@ -4417,10 +5431,11 @@ function renderTrade() {
 function tradeTransact(letter) {
   const npc = dialogueNPC;
   const idx = letter.charCodeAt(0) - 97;
+  const repMult = repPriceMult(getKingdom(Math.floor(npc.x / CH), Math.floor(npc.y / CH)).key);
   if (tradeMode === 'buy') {
     const it = npc.shop[idx];
     if (!it) return;
-    const price = Math.round(it.value * 1.2);
+    const price = Math.round(it.value * 1.2 * repMult);
     if (player.gold < price) { Sound.play('uiError'); log("You can't afford that."); return; }
     player.gold -= price; player.inventory.push(it); npc.shop.splice(idx, 1);
     Sound.play('tradeBuy');
@@ -4429,7 +5444,7 @@ function tradeTransact(letter) {
     const list = player.inventory.filter(i => i.type !== 'misc');
     const it = list[idx];
     if (!it) return;
-    const price = Math.round(it.value * 0.45);
+    const price = Math.round(it.value * 0.45 * (2 - repMult));
     player.gold += price;
     player.inventory = player.inventory.filter(i => i.uid !== it.uid);
     Sound.play('tradeSell');
@@ -4459,7 +5474,7 @@ function openCharacterSheet() {
 function renderCharacterSheet() {
   const eq = player.equipment;
   let html = `<div class="charstats">`;
-  html += `<div>Level ${player.level} Adventurer &nbsp; XP ${player.xp}/${player.xpNext}</div>`;
+  html += `<div>Level ${player.level} Adventurer &nbsp; XP ${player.xp}/${player.xpNext}${player.gameCompleted ? ' &nbsp; <span style="color:#ffd700">&#9733; Completed</span>' : ''}</div>`;
   html += `<div>HP ${player.hp}/${player.maxHp} &nbsp; MP ${player.mp}/${player.maxMp} &nbsp; Gold ${player.gold}</div><hr>`;
   const stats = [['str','STR'],['dex','DEX'],['int','INT'],['con','CON'],['wis','WIS']];
   stats.forEach(([k,label],i) => {
@@ -4819,36 +5834,324 @@ function removeDeadEntity(def) {
   }
 }
 
-// ---- quests ----
-function startBountyQuest(npc) {
-  const species = choice(Math.random, QUEST_MONSTER_POOL);
-  const need = randInt(Math.random, 3, 6);
-  const base = MONSTER_BASES[species];
-  const q = { id: 'q'+Math.random().toString(36).slice(2,9), type: 'bounty', giverId: npc.uid, giverName: npc.name,
-    target: species, need, progress: 0, rewardGold: need * 12, rewardXp: need * 6, done: false,
-    desc: `Slay ${need} ${base.name}${need>1?'s':''} for ${npc.name} of ${npc.home}.` };
-  player.quests.push(q);
-  Sound.play('questAccept');
-  log(`New quest: ${q.desc}`);
+// ============================================================================
+// ---- STORY & QUEST SYSTEM OVERHAUL — PHASE 1: Foundation ----------------
+// This is the base layer that later phases (unique story bosses, dimensions,
+// the God fight) build on. It adds three things:
+//   1) A procedurally-generated Main Quest. The narrative premise, antagonist
+//      name, and which existing bosses/dungeons fill each beat are all rolled
+//      per-seed, so different worlds tell a differently-flavored story - but
+//      every world follows the same act structure and the same fixed, un-
+//      randomized finale (still to be built: the God fight).
+//   2) A Kingdom Reputation system that lore actually plugs into: completing
+//      quests for a kingdom's people measurably changes prices there.
+//   3) A richer set of radiant/side quest templates (bounty, boss bounty,
+//      gather, protect, delivery, explore) with varied, meaningful rewards
+//      instead of the old two flavors of "kill things"/"go anywhere".
+// See the in-game guide (? then Quests) for the player-facing explanation.
+// ============================================================================
+
+// ---- Main Quest: narrative premises. Procedurally chosen per seed; the
+// exact wording is a template, but which premise, which antagonist name, and
+// which bosses fill each beat varies every playthrough. ----
+// ============================================================================
+// ---- MAIN QUEST DEPTH PASS — PHASE 8 ---------------------------------------
+// Three upgrades to the Phase 1 story generator, now that there's real
+// content to draw on: (1) nine premises instead of four, so replays actually
+// feel different; (2) boss selection now strongly prefers the roster of
+// hand-scripted story bosses (10 of them as of Phase 6) over the old generic
+// stat-block bosses, so a playthrough is far more likely to be built out of
+// named characters with real dialogue rather than reskinned monsters; (3) the
+// "gather allies" and "betrayal" beats now reference a real, deterministic
+// rival kingdom pulled from the Phase 5 politics system instead of vague
+// hand-waving, and a new "the_rift" stage bridges Act 3 into Act 4 by
+// pointing the player at content that actually exists (the Abyssal Wastes)
+// instead of the story simply stopping cold at Act 4's locked gate.
+// ============================================================================
+const MAIN_QUEST_PREMISES = [
+  { id:'darkness', title:'The Long Dark',
+    hook:(a,k1)=>`A darkness is bleeding into the world from somewhere beyond ${k1}. The elders speak of ${a}, a name older than any kingdom.` },
+  { id:'villain', title:"The Warlord's Shadow",
+    hook:(a,k1)=>`${a}, a warlord none living have seen and lived to describe, has turned kingdom against kingdom. ${k1} fears it is next.` },
+  { id:'investigate', title:'The Spreading Blight',
+    hook:(a,k1)=>`Crops rot, wells sour, and the dead do not always stay dead near ${k1}. One name keeps surfacing: ${a}.` },
+  { id:'usurper', title:'The Would-Be God',
+    hook:(a,k1)=>`A being calling itself ${a} claims dominion over ${k1} and beyond, and demands a worship no one intends to give.` },
+  { id:'prophecy', title:'The Foretold Hour',
+    hook:(a,k1)=>`An old prophecy names ${a} as the hour ${k1} finally runs out of luck. Most dismissed it as superstition, right up until the omens started matching.` },
+  { id:'awakening', title:'What Woke Beneath',
+    hook:(a,k1)=>`Something under the earth near ${k1} that was never supposed to wake has started moving again, and everyone who's gone looking for the cause names ${a}.` },
+  { id:'rebellion', title:"The Splintering Crown",
+    hook:(a,k1)=>`${k1}'s own people are turning on each other, egged on by someone calling themself ${a} who wants the kingdom to burn from the inside first.` },
+  { id:'the_hunt', title:'Something Is Hunting the Hunters',
+    hook:(a,k1)=>`Every monster-hunter who has gone after the thing named ${a} near ${k1} has stopped sending word home. You get the sense you're not the hunter here.` },
+  { id:'the_pact', title:'A Debt Come Due',
+    hook:(a,k1)=>`Generations ago, someone in ${k1} made a bargain to save it, and never mentioned what it would eventually cost. ${a} has come to collect.` },
+];
+const MYTHIC_NAME_PREFIX = ['Vael','Nyx','Thane','Sorrow','Grim','Azur','Mor','Kae','Vex','Old','Sil','Drav'];
+const MYTHIC_NAME_SUFFIX = ['gorath','issa','mund','thraxis','wyn','oth','ael','ivar','ux','endral'];
+function mythicName(rng) { return choice(rng, MYTHIC_NAME_PREFIX) + choice(rng, MYTHIC_NAME_SUFFIX); }
+function getStoryRng() { return mulberry32((SEED ^ 0x53544f52) >>> 0); }
+// scriptedOnly=true restricts to the hand-authored story boss roster (Phase 2/6/3's Malphegor);
+// existing callers that don't pass it keep getting the full pool, unchanged.
+function sortedBossPool(scriptedOnly) {
+  const seen = new Set(); const out = [];
+  const reserved = new Set(['the_antagonist', 'god']); // Act 4-exclusive: never a random story beat, never a stray spawn
+  for (const id in MONSTER_BASES) {
+    const m = MONSTER_BASES[id];
+    if (!m || !m.boss || !m.bossPower || seen.has(id) || reserved.has(id)) continue;
+    if (scriptedOnly && !m.scriptedAI) continue;
+    seen.add(id); out.push({ id, power: m.bossPower, name: m.name, scripted: !!m.scriptedAI });
+  }
+  out.sort((a, b) => a.power - b.power);
+  return out;
 }
-function startExploreQuest(npc) {
-  const q = { id: 'q'+Math.random().toString(36).slice(2,9), type: 'explore', giverId: npc.uid, giverName: npc.name,
-    target: null, need: 1, progress: 0, rewardGold: 40, rewardXp: 30, done: false,
-    desc: `Explore any dungeon for ${npc.name} of ${npc.home}.` };
-  player.quests.push(q);
+// Stage skeleton: the structure and pacing are fixed so acts always ramp up
+// consistently, but every proper noun, and which real boss fills each beat,
+// is rolled per seed. Acts 1-3 are fully playable now with existing content;
+// Act 4 is intentionally locked - it's reserved for hand-authored story
+// bosses and the God fight, which are NOT procedurally generated and are
+// coming in a later update, per design (see file header feedback).
+// Picks a sequence of distinct bosses at non-decreasing power, jittered by rng so the exact
+// boss filling each beat varies between seeds while difficulty still ramps up predictably.
+function pickBossSequence(rng, bosses, fracs) {
+  const n = bosses.length;
+  const jitter = Math.max(1, Math.floor(n * 0.12));
+  let lastIdx = -1;
+  const out = [];
+  for (const frac of fracs) {
+    let idx = Math.round(frac * (n - 1)) + randInt(rng, -jitter, jitter);
+    idx = Math.max(lastIdx + 1, Math.min(n - 1, idx));
+    lastIdx = idx;
+    out.push(bosses[idx]);
+  }
+  return out;
+}
+function generateMainQuest(rng) {
+  const premise = choice(rng, MAIN_QUEST_PREMISES);
+  const antagonist = mythicName(rng);
+  const k1 = getKingdom(Math.floor(player.x / CH), Math.floor(player.y / CH));
+  // prefer the hand-scripted boss roster; only reach into the generic pool if there genuinely
+  // aren't enough scripted bosses to fill all five combat beats (won't happen post-Phase 6, but
+  // keeps this correct if bosses are ever removed rather than only added).
+  const scriptedBosses = sortedBossPool(true);
+  const bosses = scriptedBosses.length >= 5 ? scriptedBosses : sortedBossPool(false);
+  const fallback = { id:'wolf', name:'a beast', power:1 };
+  const [b1, b2, b3, b4, b5] = bosses.length
+    ? pickBossSequence(rng, bosses, [0.05, 0.3, 0.55, 0.8, 0.97])
+    : [fallback, fallback, fallback, fallback, fallback];
+  // a real rival, pulled from the actual political map (Phase 5) rather than invented -- if k1
+  // has a hostile neighbor, name them; otherwise fall back to a generic "unknown forces" beat so
+  // the flavor text never lies about a relationship that doesn't exist in this particular seed.
+  const hostileNeighbor = kingdomNeighborKeys(k1.key).map(nk => ({ nk, rel: getKingdomRelation(k1.key, nk) })).find(r => r.rel === 'war' || r.rel === 'tension');
+  const rivalName = hostileNeighbor ? getKingdomByKey(hostileNeighbor.nk).name : null;
+  const stages = [
+    { id:'inciting', act:1, type:'auto', title:'The Call', done:false, desc: premise.hook(antagonist, k1.name) },
+    { id:'first_trial', act:1, type:'kill_boss', title:'First Trial', done:false, targetBossId:b1.id,
+      desc:`Word is ${b1.name} is behind trouble close to home. Deal with it, and word of you will start to travel too.` },
+    { id:'omen', act:1, type:'dungeon_tier', title:'An Omen', done:false, targetTier:'common',
+      desc:`Something ${antagonist} left behind is rumored to sit at the bottom of a nearby dungeon. Clear any common-tier dungeon to its deepest level.` },
+    { id:'rising_threat', act:2, type:'kill_boss', title:'Rising Threat', done:false, targetBossId:b2.id,
+      desc:`${b2.name} has thrown in with ${antagonist}. Stopping them will slow whatever is coming.` },
+    { id:'gather_allies', act:2, type:'discover_kingdoms', title:'Gather Allies', done:false, targetCount:3,
+      desc:`No single kingdom can face ${antagonist} alone. Travel and set foot in at least 3 kingdoms.` },
+    { id:'dark_dungeon', act:2, type:'dungeon_tier', title:'Into the Dark', done:false, targetTier:'uncommon',
+      desc:`An uncommon-tier dungeon has become a staging ground for ${antagonist}'s forces. Clear it to its deepest level.` },
+    { id:'betrayal', act:2, type:'kill_boss', title:'Betrayal', done:false, targetBossId:b3.id,
+      desc: rivalName
+        ? `${b3.name} was trusted once. Word is they've been taking orders from ${rivalName} -- and ${k1.name} has not forgotten what ${rivalName} is capable of.`
+        : `${b3.name} was trusted once. Not anymore. ${antagonist}'s reach goes deeper than anyone feared.` },
+    { id:'the_source', act:3, type:'kill_boss', title:'The Source', done:false, targetBossId:b4.id,
+      desc:`${b4.name} guards the path to ${antagonist} directly. This will not be an easy fight.` },
+    { id:'gathering_storm', act:3, type:'kill_boss', title:'The Gathering Storm', done:false, targetBossId:b5.id,
+      desc:`${b5.name}, the last and strongest of ${antagonist}'s lieutenants, stands between you and the truth.` },
+    { id:'the_rift', act:4, type:'discover_dimension', title:'A Door Where There Shouldn\'t Be One', done:false,
+      desc:`Everything you've learned about ${antagonist} points somewhere that shouldn't exist on any map. Find a way through -- a sealed gate, guarded by something old, is the rumor that keeps coming up.` },
+    { id:'confrontation', act:4, type:'kill_boss', title:premise.title, done:false, targetBossId:'the_antagonist',
+      desc:`${antagonist} is real, and waiting -- rumor places them behind a threshold that shouldn't be reachable by any road. Find it. This is the confrontation everything has been leading to.` },
+    { id:'final_boss', act:4, type:'kill_boss', title:'???', done:false, targetBossId:'god',
+      desc:`Locked. Unlike everything above, this fight is fixed, not procedurally generated. What ${antagonist} was hiding behind is not what you think it is.` },
+  ];
+  return { premiseId: premise.id, title: premise.title, antagonist, homeKingdom: k1.name,
+    stageIndex: 0, stages, kingdomRep: {} };
+}
+function ensureStory() {
+  if (player.story) return;
+  player.story = generateMainQuest(getStoryRng());
+  if (player.story.stages[0] && player.story.stages[0].type === 'auto') advanceStory();
+}
+function curStoryStage() { ensureStory(); return player.story.stages[player.story.stageIndex] || null; }
+function advanceStory() {
+  const st = player.story;
+  const stage = st.stages[st.stageIndex];
+  if (!stage || stage.done) return;
+  stage.done = true;
+  if (stage.type !== 'auto' && stage.type !== 'locked') {
+    const rewardGold = 40 * stage.act * stage.act, rewardXp = 60 * stage.act * stage.act;
+    player.gold += rewardGold; gainXP(rewardXp);
+    Sound.play('questComplete');
+    log(`*** Main Quest — ${stage.title} complete! (+${rewardGold}g, +${rewardXp}xp) ***`);
+  } else {
+    log(`*** Main Quest — ${stage.title} ***`);
+  }
+  st.stageIndex++;
+  const next = st.stages[st.stageIndex];
+  if (next) log(`Main Quest — ${next.title}: ${next.desc}`);
+}
+function checkMainQuestBossKill(monsterId) {
+  const stage = curStoryStage();
+  if (stage && stage.type === 'kill_boss' && stage.targetBossId === monsterId) advanceStory();
+}
+function checkMainQuestDungeonTier(tier) {
+  const stage = curStoryStage();
+  if (stage && stage.type === 'dungeon_tier' && stage.targetTier === tier) advanceStory();
+}
+function checkMainQuestKingdoms() {
+  const stage = curStoryStage();
+  if (stage && stage.type === 'discover_kingdoms' && (player.discoveredKingdoms || []).length >= stage.targetCount) advanceStory();
+}
+function checkMainQuestDimensions() {
+  const stage = curStoryStage();
+  if (stage && stage.type === 'discover_dimension' && (player.discoveredDimensions || []).length > 0) advanceStory();
+}
+
+// ---- Kingdom Reputation: quests now actually change how a kingdom treats you ----
+function getKingdomRep(key) { ensureStory(); return player.story.kingdomRep[key] || 0; }
+function addKingdomRep(key, amount) {
+  ensureStory();
+  player.story.kingdomRep[key] = (player.story.kingdomRep[key] || 0) + amount;
+}
+// 1.0 = neutral; higher rep nudges prices down (better buys), lower rep nudges them up.
+function repPriceMult(key) {
+  ensureStory();
+  let mult = 1 - getKingdomRep(key) / 400;
+  const rep = player.story.kingdomRep || {};
+  for (const otherKey in rep) {
+    if (otherKey === key || !rep[otherKey]) continue;
+    const rel = getKingdomRelation(key, otherKey);
+    const state = rel && KINGDOM_RELATION_STATES.find(s => s.id === rel);
+    if (!state || !state.priceRipple) continue;
+    // standing with a kingdom hostile to this one (priceRipple>0) makes prices worse here;
+    // standing with an ally/trade partner (priceRipple<0) makes them better -- scaled by how much
+    // reputation you actually have there, capped so one maxed-out relationship can't swing prices
+    // more than a genuinely earned local reputation could.
+    mult += Math.sign(rep[otherKey]) * state.priceRipple * Math.min(1, Math.abs(rep[otherKey]) / 40);
+  }
+  return Math.max(0.75, Math.min(1.25, mult));
+}
+
+// ---- Radiant Quests: expanded templates (Phase 1) ----
+function rollRadiantQuestOffer(npc, rng) {
+  const kingdom = getKingdom(Math.floor(npc.x / CH), Math.floor(npc.y / CH));
+  const neighborRels = kingdomNeighborKeys(kingdom.key).map(nk => ({ nk, rel: getKingdomRelation(kingdom.key, nk) }));
+  const hostileNeighbors = neighborRels.filter(r => r.rel === 'war' || r.rel === 'tension');
+  const friendlyNeighbors = neighborRels.filter(r => r.rel === 'trade_pact' || r.rel === 'alliance');
+  const weights = [['bounty',3],['boss_bounty',1.2],['gather',2],['protect',2],['delivery',1.5],['explore',1.5]];
+  if (hostileNeighbors.length) weights.push(['sabotage', 2.5]);
+  if (friendlyNeighbors.length) weights.push(['caravan_guard', 2]);
+  const kind = weightedChoice(rng, weights);
+  const base = { id:'q'+Math.random().toString(36).slice(2,9), giverId: npc.uid, giverName: npc.name, giverHome: npc.home,
+    kingdomKey: kingdom.key, done:false, progress:0 };
+  if (kind === 'sabotage') {
+    const target = choice(rng, hostileNeighbors);
+    const rival = getKingdomByKey(target.nk);
+    const species = choice(rng, QUEST_MONSTER_POOL), need = randInt(rng, 3, 5), m = MONSTER_BASES[species];
+    return Object.assign(base, { type:'sabotage', target:species, need, rivalKingdomKey: target.nk, rewardGold:need*18, rewardXp:need*11, rewardRep:7,
+      desc:`${kingdom.name} is ${KINGDOM_RELATION_STATES.find(s=>s.id===target.rel).label} with ${rival.name}. Raid ${need} of their ${m.name.toLowerCase()} scouts probing the border.` });
+  }
+  if (kind === 'caravan_guard') {
+    const target = choice(rng, friendlyNeighbors);
+    const partner = getKingdomByKey(target.nk);
+    const species = choice(rng, QUEST_MONSTER_POOL), need = randInt(rng, 2, 4), m = MONSTER_BASES[species];
+    return Object.assign(base, { type:'caravan_guard', target:species, need, partnerKingdomKey: target.nk, rewardGold:need*20, rewardXp:need*10, rewardRep:6, rewardPartnerRep:4,
+      desc:`A trade caravan bound for ${partner.name} needs an escort. Clear ${need} ${m.name.toLowerCase()}s off the road before it departs.` });
+  }
+  if (kind === 'bounty') {
+    const species = choice(rng, QUEST_MONSTER_POOL), need = randInt(rng, 3, 6), m = MONSTER_BASES[species];
+    return Object.assign(base, { type:'bounty', target:species, need, rewardGold:need*14, rewardXp:need*8, rewardRep:4,
+      desc:`Slay ${need} ${m.name}${need>1?'s':''} troubling ${npc.home}.` });
+  }
+  if (kind === 'boss_bounty') {
+    const pool = sortedBossPool().filter(b => b.power <= 3);
+    if (!pool.length) return rollRadiantQuestOffer(npc, rng);
+    const b = choice(rng, pool);
+    return Object.assign(base, { type:'boss_bounty', target:b.id, need:1, rewardGold:60+b.power*30, rewardXp:50+b.power*40,
+      rewardRep:8, rewardItem:true, desc:`${npc.name} wants ${b.name} dealt with for good. This one won't be easy.` });
+  }
+  if (kind === 'gather') {
+    const mat = choice(rng, ['pelt','herb','ore']), need = randInt(rng, 4, 8), matBase = ITEM_BASES.find(b => b.id === mat);
+    return Object.assign(base, { type:'gather', target:mat, need, rewardGold:need*8, rewardXp:need*5, rewardRep:3,
+      desc:`Bring ${need} ${matBase.name}${need>1?'s':''} to ${npc.name}.` });
+  }
+  if (kind === 'protect') {
+    const species = choice(rng, QUEST_MONSTER_POOL), need = randInt(rng, 2, 4), m = MONSTER_BASES[species];
+    return Object.assign(base, { type:'protect', target:species, need, rewardGold:need*16, rewardXp:need*9, rewardRep:6,
+      desc:`${npc.home} is under threat from ${m.name.toLowerCase()}s. Thin their numbers (${need}) before they strike.` });
+  }
+  if (kind === 'delivery') {
+    return Object.assign(base, { type:'delivery', target:null, need:1, rewardGold:35, rewardXp:20, rewardRep:5,
+      desc:`Carry word from ${npc.name} of ${npc.home} to any elder in another kingdom.` });
+  }
+  return Object.assign(base, { type:'explore', target:null, need:1, rewardGold:40, rewardXp:30, rewardRep:3,
+    desc:`Explore any dungeon and report back to ${npc.name}.` });
+}
+function offerRadiantQuests(npc) {
+  Sound.play('uiOpen');
+  gameState = 'dialogue'; dialogueNPC = npc;
+  const offers = [rollRadiantQuestOffer(npc, Math.random), rollRadiantQuestOffer(npc, Math.random), rollRadiantQuestOffer(npc, Math.random)];
+  const opts = []; let n = 0;
+  const nextKey = () => String.fromCharCode(97 + (n++));
+  offers.forEach(offer => { opts.push({ key: nextKey(), label: `${offer.desc} (${offer.rewardGold}g, ${offer.rewardXp}xp)`, action: () => { acceptRadiantQuest(offer); closeModal(); } }); });
+  opts.push({ key: nextKey(), label: 'Never mind', action: () => closeModal() });
+  dialogueOptions = opts;
+  renderModal(`Work available — ${npc.name}`,
+    `<div class="npcline dim">Choose a task:</div>` + opts.map(o => `<div class="modal-opt" onclick="simulateKey('${o.key}')">[${o.key}] ${o.label}</div>`).join(''),
+    'Letter/click to choose, Esc to leave.');
+}
+function acceptRadiantQuest(offer) {
+  player.quests.push(offer);
   Sound.play('questAccept');
-  log(`New quest: ${q.desc}`);
+  log(`New quest: ${offer.desc}`);
 }
 function checkBountyQuests(monsterId) {
   for (const q of player.quests) {
-    if (q.done || q.type !== 'bounty' || q.target !== monsterId) continue;
-    q.progress++;
-    if (q.progress >= q.need) completeQuest(q);
+    if (q.done) continue;
+    if ((q.type === 'bounty' || q.type === 'protect' || q.type === 'sabotage' || q.type === 'caravan_guard') && q.target === monsterId) {
+      q.progress++;
+      if (q.progress >= q.need) completeQuest(q);
+    } else if (q.type === 'boss_bounty' && q.target === monsterId) {
+      completeQuest(q);
+    }
   }
+  checkMainQuestBossKill(monsterId);
 }
 function checkExploreQuests() {
   for (const q of player.quests) {
     if (q.done || q.type !== 'explore') continue;
+    completeQuest(q);
+  }
+}
+function checkGatherQuests() {
+  for (const q of player.quests) {
+    if (q.done || q.type !== 'gather') continue;
+    let have = 0;
+    for (const it of player.inventory) if (it.id === q.target) have += (it.amount || 1);
+    if (have < q.need) continue;
+    let remaining = q.need;
+    player.inventory = player.inventory.filter(it => {
+      if (it.id !== q.target || remaining <= 0) return true;
+      const amt = it.amount || 1;
+      if (amt <= remaining) { remaining -= amt; return false; }
+      it.amount = amt - remaining; remaining = 0; return true;
+    });
+    completeQuest(q);
+  }
+}
+function checkDeliveryQuests(npc) {
+  if (npc.roleId !== 'elder') return;
+  const k = getKingdom(Math.floor(npc.x / CH), Math.floor(npc.y / CH));
+  for (const q of player.quests) {
+    if (q.done || q.type !== 'delivery' || q.kingdomKey === k.key) continue;
     completeQuest(q);
   }
 }
@@ -4888,7 +6191,7 @@ function enterDungeon(id) {
   clearAreaFx();
   const dg = dungeonRegistry.get(id);
   if (!dg.levels[0]) dg.levels[0] = generateDungeonLevel(dg.theme, 1, dg.maxDepth, dg.variant);
-  player.overworldReturn = { x: player.x, y: player.y };
+  player.overworldReturn = { x: player.x, y: player.y, mode: player.mode, dimensionId: player.dimensionId || null };
   player.mode = 'dungeon'; player.dungeonId = id; player.dungeonDepth = 1;
   const lvl = dg.levels[0];
   player.x = lvl.upStairs.x; player.y = lvl.upStairs.y;
@@ -4901,7 +6204,7 @@ function enterDungeon(id) {
 }
 function descend() {
   const dg = curDungeon(); const nd = player.dungeonDepth + 1;
-  if (nd > dg.maxDepth) { log('This is the deepest level.'); return; }
+  if (nd > dg.maxDepth) { log('This is the deepest level.'); checkMainQuestDungeonTier(dg.tier); return; }
   clearAreaFx();
   if (!dg.levels[nd - 1]) dg.levels[nd - 1] = generateDungeonLevel(dg.theme, nd, dg.maxDepth, dg.variant);
   player.dungeonDepth = nd;
@@ -4914,9 +6217,12 @@ function descend() {
 function ascend() {
   clearAreaFx();
   if (player.dungeonDepth === 1) {
-    player.mode = 'overworld';
-    player.x = player.overworldReturn.x; player.y = player.overworldReturn.y;
-    log('You climb back to the surface.');
+    const ret = player.overworldReturn || { x: 0, y: 0, mode: 'overworld', dimensionId: null };
+    player.mode = ret.mode || 'overworld';
+    player.dimensionId = ret.mode === 'dimension' ? (ret.dimensionId || null) : null;
+    player.dungeonId = null; player.dungeonDepth = 0;
+    player.x = ret.x; player.y = ret.y;
+    log(player.mode === 'dimension' ? 'You climb back out into the ashen wastes.' : 'You climb back to the surface.');
   } else {
     player.dungeonDepth--;
     const dg = curDungeon(); const lvl = dg.levels[player.dungeonDepth - 1];
@@ -4986,13 +6292,20 @@ function chasmFall() {
 
 function levelUp() {
   player.level++;
-  player.xpNext = Math.round(player.xpNext * 1.35 + 20);
-  player.maxHp += Math.round(6 + player.con * 0.3);
-  player.maxMp += Math.round(3 + player.int * 0.3);
+  player.xpNext = player.level >= LEVEL_CAP ? 0 : xpNeededForLevel(player.level);
+  // HP/MP growth now scales with player.level itself (not just current CON/INT), so the gap
+  // between a level 1 and a level 99 character is a real gulf -- matching monster power, which
+  // now scales far more steeply at high depthScale too (see makeMonster's new exponential curve).
+  player.maxHp += Math.round(6 + player.con * 0.3 + player.level * 0.9);
+  player.maxMp += Math.round(3 + player.int * 0.3 + player.level * 0.45);
   player.hp = player.maxHp; player.mp = player.maxMp;
   player.statPoints += 2;
   let msg = `*** You reached level ${player.level}! (+2 stat points) ***`;
   if (player.level % 3 === 0) { player.talentPoints++; msg += ' A new talent is available (press T).'; }
+  // milestone stat bonus every 10 levels -- gives the long stretch between talents some extra
+  // felt impact, and helps keep pace with how much tougher high-tier content becomes.
+  if (player.level % 10 === 0) { player.statPoints += 3; msg += ' (Milestone: +3 bonus stat points!)'; }
+  if (player.level >= LEVEL_CAP) msg = `*** You reached the maximum level, ${LEVEL_CAP}! You are as strong as this world can make you. ***`;
   Sound.play('levelUp');
   log(msg);
 }
@@ -5048,12 +6361,18 @@ function compareItem(it) {
 }
 
 // ---- inventory v2: categorized, paginated, with equipped section + unequip ----
-const INV_FILTERS = ['all','weapon','armor','consumable','material','misc'];
+const INV_FILTERS = ['all','weapon','armor','consumable','material','scroll','misc'];
 const PAGE_SIZE = 20;
 let invSelectedSlot = null;
 function openInventory() { Sound.play('uiOpen'); gameState = 'inventory'; invSelected = null; invSelectedSlot = null; if (!player.invFilter) player.invFilter='all'; if (!player.invPage) player.invPage=0; renderInventory(); }
+// Named categories get their own tab; everything else (chests, cyberware chips, mutagen vials,
+// keys, and any future item type) falls into 'misc' by default instead of only ever appearing in
+// ALL. This is a structural guarantee, not a checklist -- a new item type added later can't
+// accidentally become unfilterable again the way scrolls/tomes/chests previously were.
+const INV_NAMED_TYPES = new Set(['weapon','armor','consumable','material','scroll']);
 function filteredInventory() {
   if (player.invFilter === 'all') return player.inventory.filter(i=>i.type!=='corpse');
+  if (player.invFilter === 'misc') return player.inventory.filter(i => i.type !== 'corpse' && !INV_NAMED_TYPES.has(i.type));
   return player.inventory.filter(i => i.type === player.invFilter);
 }
 function durabilityTag(it) {
@@ -5095,6 +6414,34 @@ function renderInventory() {
   renderModal('Inventory', html, 'Letter/click to select · Tab or click category to filter · [ ] page · Esc close');
 }
 function setInvFilter(f) { player.invFilter = f; player.invPage = 0; renderInventory(); }
+function promptQuickslotAssign(it) {
+  gameState = 'quickslotassign'; invSelected = it;
+  player.quickslots = player.quickslots || [null, null, null, null];
+  const html = player.quickslots.map((uid, i) => {
+    const cur = uid ? player.inventory.find(x => x.uid === uid) : null;
+    return `<div class="modal-opt" onclick="simulateKey('${i+1}')">[${i+1}] ${cur ? `Replace: ${cur.name}` : '(empty)'}</div>`;
+  }).join('');
+  renderModal(`Assign ${it.name} to which quickslot?`, html, 'Press 1-4 to choose, Esc to cancel.');
+}
+function assignQuickslot(slot, it) {
+  player.quickslots = player.quickslots || [null, null, null, null];
+  player.quickslots[slot] = it.uid;
+  log(`${it.name} assigned to quickslot ${slot + 1}.`);
+  Sound.play('equip');
+  gameState = 'playing'; closeModal(); updateSidebar();
+}
+// Uses whatever's in the given quickslot without opening the inventory: equips gear directly,
+// or runs the same useItem() logic the inventory "Use" action calls for everything else.
+function useQuickslot(slot) {
+  player.quickslots = player.quickslots || [null, null, null, null];
+  const uid = player.quickslots[slot];
+  if (!uid) { log(`Quickslot ${slot + 1} is empty. Assign one from your inventory (select an item, then "Set quickslot").`); return; }
+  const it = player.inventory.find(x => x.uid === uid);
+  if (!it) { log(`Quickslot ${slot + 1}'s item is gone.`); player.quickslots[slot] = null; updateSidebar(); return; }
+  if (it.type === 'weapon' || it.type === 'armor') equipItem(it);
+  else useItem(it);
+  updateSidebar();
+}
 const THROWABLE_EFFECTS = new Set(['aoefire','aoefrost','aoepoison','aoeconfuse','throwdmg','scrollfire','throwaoe','throwgas','throwemp','throwslow','throwsnare']);
 function openItemAction(it, slot) {
   gameState = 'itemaction'; invSelected = it; invSelectedSlot = slot || null;
@@ -5111,6 +6458,7 @@ function openItemAction(it, slot) {
     if (it.type === 'tome') opts.push(['u', 'Study (learn spell)']);
     if (it.type === 'cyberchip') opts.push(['u', 'Extract (learn blueprint)']);
     if (it.type === 'mutagen') opts.push(['u', 'Drink']);
+    opts.push(['q', 'Set quickslot']);
     opts.push(['d', 'Drop']);
   }
   opts.push(['x', 'Cancel']);
@@ -5142,6 +6490,7 @@ function pickUp() {
     log(`You pick up ${real.name}${qty>1?` x${qty}`:''}.`);
   }
   removeItemAt(player.x, player.y, real.uid);
+  checkGatherQuests();
   updateSidebar();
   endTurn();
 }
@@ -5162,15 +6511,28 @@ function fireRangedWeapon() {
 function openQuestLog() {
   Sound.play('uiOpen');
   gameState = 'questlog';
+  ensureStory();
   let html = '';
+  html += `<div class="trade-col-title">Main Quest — ${player.story.title}</div>`;
+  player.story.stages.forEach((s, i) => {
+    if (i > player.story.stageIndex) return; // don't spoil stages the player hasn't reached
+    const mark = s.done ? '✓' : (s.type === 'locked' ? '🔒' : '➤');
+    const cls = (i === player.story.stageIndex && !s.done) ? 'modal-opt' : 'modal-opt dim';
+    html += `<div class="${cls}">${mark} ${s.title}${(i === player.story.stageIndex) ? ': ' + s.desc : ''}</div>`;
+  });
   const active = player.quests.filter(q => !q.done);
   const done = player.quests.filter(q => q.done);
-  html += `<div class="trade-col-title">Active</div>`;
+  html += `<div class="trade-col-title">Active Side Quests</div>`;
   if (!active.length) html += `<div class="npcline dim">No active quests. Ask NPCs marked as willing to give work.</div>`;
   for (const q of active) html += `<div class="modal-opt">${q.desc}<br><span class="dim">Progress: ${q.progress}/${q.need}</span></div>`;
   if (done.length) {
-    html += `<div class="trade-col-title">Completed</div>`;
-    for (const q of done) html += `<div class="modal-opt dim">${q.desc} ✓</div>`;
+    html += `<div class="trade-col-title">Completed (most recent)</div>`;
+    for (const q of done.slice(-10)) html += `<div class="modal-opt dim">${q.desc} ✓</div>`;
+  }
+  const repEntries = Object.entries(player.story.kingdomRep || {}).filter(([,v]) => v !== 0);
+  if (repEntries.length) {
+    html += `<div class="trade-col-title">Kingdom Reputation</div>`;
+    for (const [key, v] of repEntries) { const kn = kingdomRegistry.get(key); html += `<div class="modal-opt dim">${kn ? kn.name : key}: ${v > 0 ? '+' : ''}${v}</div>`; }
   }
   renderModal('Quest Log', html, 'Esc to close.');
 }
@@ -5542,12 +6904,22 @@ function findNPCByUid(uid) {
 }
 function completeQuest(q) {
   q.done = true;
-  player.gold += q.rewardGold;
-  gainXP(q.rewardXp);
+  player.gold += q.rewardGold || 0;
+  gainXP(q.rewardXp || 0);
   const giver = findNPCByUid(q.giverId);
   if (giver) giver.affection = (giver.affection || 0) + Math.round(15 * (1 + (player.affectionBonus || 0)));
+  if (q.kingdomKey && q.rewardRep) addKingdomRep(q.kingdomKey, q.rewardRep);
+  if (q.type === 'caravan_guard' && q.partnerKingdomKey && q.rewardPartnerRep) addKingdomRep(q.partnerKingdomKey, q.rewardPartnerRep);
+  if (q.type === 'sabotage' && q.rivalKingdomKey) addKingdomRep(q.rivalKingdomKey, -Math.round((q.rewardRep || 4) / 2));
+  let itemMsg = '';
+  if (q.rewardItem) {
+    const rarity = randInt(Math.random, 1, 3);
+    const pool = ITEM_BASES.filter(b => b.type === 'weapon' || b.type === 'armor').map(b => b.id);
+    const it = makeItem(choice(Math.random, pool), rarity, Math.random, playerLevelPowerMult(player.level));
+    if (it) { player.inventory.push(it); itemMsg = `, found ${it.name}`; }
+  }
   Sound.play('questComplete');
-  log(`*** Quest complete: ${q.desc} (+${q.rewardGold}g, +${q.rewardXp}xp${giver ? ', +15 affection' : ''}) ***`);
+  log(`*** Quest complete: ${q.desc} (+${q.rewardGold||0}g, +${q.rewardXp||0}xp${giver ? ', +15 affection' : ''}${q.kingdomKey && q.rewardRep ? `, +${q.rewardRep} rep` : ''}${itemMsg}) ***`);
 }
 function giveGift(npc, item) {
   const base = Math.max(1, Math.round(item.value / 3));
@@ -5765,6 +7137,7 @@ function openChest(chestItem) {
   Sound.play('chest');
   player.inventory = player.inventory.filter(i => i.uid !== chestItem.uid);
   const tier = chestItem.tier || 0;
+  const powerMult = chestItem.powerMult || 1;
   const n = randInt(Math.random, 2, 4);
   const maxValueTier = Math.min(4, tier + 1);
   const baseIds = ITEM_BASES.filter(b => {
@@ -5773,9 +7146,9 @@ function openChest(chestItem) {
     return true;
   }).map(b => b.id);
   const gotten = [];
-  for (let i = 0; i < n; i++) { const it = makeItem(choice(Math.random, baseIds), tier, Math.random); player.inventory.push(it); gotten.push(it.name); }
-  const gold = randInt(Math.random, 10, 30) * (tier+1);
-  player.gold += gold;
+  for (let i = 0; i < n; i++) { const it = makeItem(choice(Math.random, baseIds), tier, Math.random, powerMult); player.inventory.push(it); gotten.push(it.name); }
+  const gold = randInt(Math.random, 10, 30) * (tier+1) * powerMult;
+  player.gold += Math.round(gold);
   if (Math.random() < 0.15) { const rid = choice(Math.random, RECIPES).id; if (!player.knownRecipes.includes(rid)) { player.knownRecipes.push(rid); gotten.push('Recipe: ' + RECIPES.find(r=>r.id===rid).name); } }
   if (Math.random() < 0.18) { const tome = makeTome(tier, Math.random); player.inventory.push(tome); gotten.push(tome.name); }
   log(`You break open the chest and find: ${gotten.join(', ')}, and ${gold} gold!`);
@@ -5822,8 +7195,8 @@ function dropLoot(def) {
     const pTier = monsterPowerTier(def);
     if (base && base.loot) items.push(...rollLoot(base.loot, Math.random));
     if (Math.random() < 0.5 || def.dropGold) { const g = makeItem('gold', 0, Math.random); g.amount = Math.round(randInt(Math.random, 1, 10) * (def.boss ? 12 : 1) * goldMult); items.push(g); }
-    if (Math.random() < (0.10 + pTier * 0.05) || def.boss) { const baseIds = lootBaseIdsFor(def); items.push(makeItem(choice(Math.random, baseIds), def.boss ? Math.max(3, lootRarityFor(def)) : lootRarityFor(def), Math.random)); }
-    if (def.boss && Math.random() < 0.4) items.push(makeItem('chest', 0, Math.random));
+    if (Math.random() < (0.10 + pTier * 0.05) || def.boss) { const baseIds = lootBaseIdsFor(def); items.push(makeItem(choice(Math.random, baseIds), def.boss ? Math.max(3, lootRarityFor(def)) : lootRarityFor(def), Math.random, itemPowerMult(def.powerScale || 1))); }
+    if (def.boss && Math.random() < 0.4) { const chestItem = makeItem('chest', 0, Math.random); chestItem.tier = Math.min(4, pTier + 1); chestItem.powerMult = itemPowerMult(def.powerScale || 1); items.push(chestItem); }
     if (def.boss && Math.random() < 0.5) items.push(makeTome(randInt(Math.random,2,3), Math.random));
     else if (Math.random() < 0.03) items.push(makeTome(randInt(Math.random,0,1), Math.random));
     if (def.kind === 'monster' && !['rabbit','gull','fox','hawk'].includes(def.monsterId)) items.push(makeCorpse(def));
@@ -5839,6 +7212,17 @@ function dropLoot(def) {
 }
 
 // ---- death v3: crime/bounty on killing an NPC ----
+// Bugfix: previously only a literal killer===player check granted XP/kill-credit, so anything
+// killed by a summoned ally, a companion, or a poison/fire tick that outlasted the fight gave the
+// player nothing -- even though the player caused it. This (plus the harmedByPlayer flag set in
+// doAttack/spell damage) makes "indirect" kills count too.
+function isPlayerOwnedKiller(killer) {
+  if (!killer) return false;
+  if (killer === player) return true;
+  if (killer.kind === 'ally' && killer.owner) return true;
+  if (player.companions && player.companions.includes(killer)) return true;
+  return false;
+}
 function onDeath(def, killer) {
   if (def === player) {
     if ((player.secondWindCharges || 0) > 0) {
@@ -5860,7 +7244,11 @@ function onDeath(def, killer) {
   def.alive = false; def.hp = 0;
   Sound.play(def.kind === 'npc' ? 'npcDeath' : 'monsterDeath');
   log(`${def.name} dies!`);
-  if (killer === player) {
+  if (def.deathLine) log(`${def.name}: "${def.deathLine}"`);
+  if (def.monsterId === 'archdemon_malphegor') unlockAbyssalWastes(def);
+  if (def.monsterId === 'the_antagonist') triggerGodReveal(def);
+  if (def.monsterId === 'god') triggerSimulationReveal(def);
+  if (isPlayerOwnedKiller(killer) || def.harmedByPlayer) {
     gainXP(def.xp || 1);
     if (def.kind === 'monster') { player.killCounts[def.monsterId] = (player.killCounts[def.monsterId] || 0) + 1; checkBountyQuests(def.monsterId); }
     if (def.kind === 'npc' && !curIsDungeon()) { commitCrime(getRegionKey(def.x, def.y), bountyValueFor(def)); }
@@ -5887,7 +7275,7 @@ function onDeath(def, killer) {
 // ---- companions: NPCs (including a following spouse) that travel with the player everywhere ----
 function curNPCs() {
   const arr = [];
-  if (!curIsDungeon()) {
+  if (!curIsDungeon() && !curIsDimension()) {
     const pcx = Math.floor(player.x / CH), pcy = Math.floor(player.y / CH);
     for (let cy = pcy - 1; cy <= pcy + 1; cy++) for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
       const c = worldChunks.get(chunkKey(cx, cy));
@@ -6007,11 +7395,12 @@ function openDialogue(npc) {
     else { line = npc.rumor; if (Math.random() < 0.3) { const dirs = directionsRumor(npc); if (dirs) line = dirs; } else if (Math.random() < 0.15) { const k = getKingdom(Math.floor(npc.x/CH), Math.floor(npc.y/CH)); line = k.history; } }
     log(`${npc.name}: "${line}"`);
     if (canGain) { npc.affection = (npc.affection || 0) + 1; npc.lastTalkTurn = turnCount; }
+    checkDeliveryQuests(npc);
     closeModal();
   }});
   if (npc.shop) opts.push({ key: nextKey(), label: 'Trade', action: () => openTrade(npc) });
   if ((npc.teachSpells && npc.teachSpells.length) || (npc.teachRecipes && npc.teachRecipes.length)) opts.push({ key: nextKey(), label: 'Learn', action: () => openTrain(npc) });
-  if (npc.canGiveQuest && !player.quests.some(q => q.giverId === npc.uid && !q.done)) opts.push({ key: nextKey(), label: 'Ask for work', action: () => { if (Math.random() < 0.5) startBountyQuest(npc); else startExploreQuest(npc); closeModal(); } });
+  if (npc.canGiveQuest && !player.quests.some(q => q.giverId === npc.uid && !q.done)) opts.push({ key: nextKey(), label: 'Ask for work', action: () => offerRadiantQuests(npc) });
   if (npc.healer) opts.push({ key: nextKey(), label: 'Pay for healing', action: () => payForHealing(npc) });
   opts.push({ key: nextKey(), label: 'Give gift', action: () => openGiftPicker(npc) });
   if (!npc.spouse && !player.spouse && (npc.affection || 0) >= 80 && !NON_MARRIAGEABLE.has(npc.roleId)) opts.push({ key: nextKey(), label: 'Propose marriage', action: () => proposeMarriage(npc) });
@@ -6087,6 +7476,7 @@ function beginScenario(letter) {
   if (!scenario) return;
   placePlayerForScenario(scenario.id);
   gameState = 'playing';
+  document.getElementById('title-screen').classList.add('hidden');
   document.getElementById('modal').classList.add('hidden');
   if (scenario.id === 'shipwreck') {
     player.gold = Math.max(0, Math.round(player.gold * 0.2));
@@ -6258,7 +7648,7 @@ const TILE_FEATURE_DESCRIPTIONS = {
 };
 function describeTile(t) {
   if (!t) return 'Nothing but darkness.';
-  const b = BIOMES[t.biome];
+  const b = BIOMES[t.biome] || (curIsDimension() && DIMENSIONS[player.dimensionId] && DIMENSIONS[player.dimensionId].biomes[t.biome]);
   let extra = '';
   if (t.feature === 'dungeon_entrance') { const dg = dungeonRegistry.get(t.dungeonId); extra = `<br>${dg.entranceName || 'An entrance'} — leads to ${dg.name} (${dg.tier} tier, ${dg.maxDepth} levels, recommended level ${dg.recommendedLevel || 1}+).`; }
   else if (t.feature === 'shrine') extra = t.shrineUsed ? '<br>An ancient shrine, its magic spent.' : '<br>An ancient shrine hums with dormant power.';
@@ -6299,7 +7689,18 @@ function openLook() {
   html += `<div class="trade-col-title">Standing on</div><div class="npcline">${describeTile(curTileAt(player.x,player.y))}</div>`;
   const groundItems = itemsAt(player.x, player.y).filter(i => i.type !== 'corpse');
   if (groundItems.length) html += `<div class="npcline">Here: ${groundItems.map(i => i.name).join(', ')}</div>`;
-  if (!curIsDungeon()) { const k = getKingdom(Math.floor(player.x/CH), Math.floor(player.y/CH)); html += `<div class="trade-col-title">Region</div><div class="npcline">${k.history}</div>`; }
+  if (!curIsDungeon() && !curIsDimension()) {
+    const k = getKingdom(Math.floor(player.x/CH), Math.floor(player.y/CH));
+    html += `<div class="trade-col-title">Region</div><div class="npcline">${k.history}</div>`;
+    const rels = kingdomNeighborKeys(k.key).map(nk => ({ nk, rel: getKingdomRelation(k.key, nk) })).filter(r => r.rel);
+    if (rels.length) {
+      html += `<div class="npcline dim">Relations: ` + rels.map(r => {
+        const state = KINGDOM_RELATION_STATES.find(s => s.id === r.rel);
+        const neighborName = getKingdomByKey(r.nk).name;
+        return `${neighborName} (${state.label})`;
+      }).join(', ') + `</div>`;
+    }
+  }
   renderModal('Look Around', html, 'Esc to close. (Click any visible tile on the map to examine it directly.)');
 }
 
@@ -6317,6 +7718,7 @@ function isAtWaystoneNow() {
     const t = curTileAt(player.x, player.y);
     return !!(t && t.feature === 'waystone');
   }
+  if (curIsDimension()) return false;
   const c = getChunk(Math.floor(player.x / CH), Math.floor(player.y / CH));
   if (c && c.settlement) return true;
   return player.waypoints.some(w => w.x === player.x && w.y === player.y);
@@ -6331,7 +7733,9 @@ function warpToDungeonEntrance() {
   const dg = curDungeon();
   if (!dg) return;
   clearAreaFx();
-  player.mode = 'overworld'; player.dungeonId = null; player.dungeonDepth = 0;
+  player.mode = dg.originMode || 'overworld';
+  player.dimensionId = dg.originMode === 'dimension' ? (dg.originDimensionId || null) : null;
+  player.dungeonId = null; player.dungeonDepth = 0;
   player.x = dg.x; player.y = dg.y;
   relocateAllies();
   log(`The waystone flares to life, and the dungeon releases you back into daylight at ${dg.name}.`);
@@ -6423,7 +7827,16 @@ function confirmTravel(letter) {
   gameState = 'playing';
   closeModal();
   pendingTravelBypass = null;
-  if (curIsDungeon()) { clearAreaFx(); player.mode = 'overworld'; player.dungeonId = null; player.dungeonDepth = 0; }
+  if (curIsDungeon()) {
+    const dg = curDungeon();
+    clearAreaFx();
+    player.mode = (dg && dg.originMode) || 'overworld';
+    player.dimensionId = (dg && dg.originMode === 'dimension') ? (dg.originDimensionId || null) : null;
+    player.dungeonId = null; player.dungeonDepth = 0;
+  } else if (curIsDimension()) {
+    clearAreaFx();
+    player.mode = 'overworld'; player.dimensionId = null;
+  }
   player.x = d.x; player.y = d.y;
   relocateAllies();
   log(`${bypass ? 'A surge of magic tears you away and deposits you' : 'You travel swiftly'} at ${d.label}.`);
@@ -6433,7 +7846,7 @@ function confirmTravel(letter) {
 }
 
 function plantWaystoneShard(shard) {
-  if (curIsDungeon()) { log("You can't plant a waystone shard inside a dungeon."); return; }
+  if (curIsDungeon() || curIsDimension()) { log("You can't plant a waystone shard here."); return; }
   const defaultName = `Waypoint ${player.waypoints.length + 1}`;
   let name = defaultName;
   try {
@@ -6449,7 +7862,7 @@ function plantWaystoneShard(shard) {
 }
 
 function markWaypoint() {
-  if (curIsDungeon()) { log("You can't plant a waystone shard inside a dungeon."); return; }
+  if (curIsDungeon() || curIsDimension()) { log("You can't plant a waystone shard here."); return; }
   const shard = player.inventory.find(i => i.effect === 'placewaypoint');
   if (!shard) { log("You need a Waystone Shard to plant a permanent waypoint here. Alchemists, traders, and dungeon vaults sometimes stock them."); return; }
   plantWaystoneShard(shard);
@@ -6457,7 +7870,7 @@ function markWaypoint() {
 
 // ---- kingdom discovery: guarantees the player actually sees the lore ----
 function checkKingdomDiscovery() {
-  if (curIsDungeon()) return;
+  if (curIsDungeon() || curIsDimension()) return;
   const cx = Math.floor(player.x / CH), cy = Math.floor(player.y / CH);
   const k = getKingdom(cx, cy);
   player.discoveredKingdoms = player.discoveredKingdoms || [];
@@ -6465,12 +7878,13 @@ function checkKingdomDiscovery() {
     player.discoveredKingdoms.push(k.key);
     Sound.play('discovery');
     log(`*** You have entered ${k.name}. ${k.history} ***`);
+    checkMainQuestKingdoms();
   }
 }
 
 // ---- fast-travel discovery: settlements register once you've actually walked into them ----
 function checkFastTravelDiscovery() {
-  if (curIsDungeon()) return;
+  if (curIsDungeon() || curIsDimension()) return;
   const c = getChunk(Math.floor(player.x / CH), Math.floor(player.y / CH));
   if (c && c.settlement) {
     player.knownSettlements = player.knownSettlements || [];
@@ -6574,7 +7988,7 @@ function paySpellCost(ability) {
 // ---- extended effect application: confuse status, blinklike (shared by phantom step / time skip /
 // cyber blink implants / mutation warp step), and environment destruction on fire-flagged abilities ----
 function applyEffectToTarget(spell, t) {
-  const dmgMult = (1 + (player.spellDmgBonus || 0) + (abilityPoolOf(spell.id) === 'technique' ? (player.techniqueDmgBonus || 0) : 0) + (abilityPoolOf(spell.id) === 'mutation' ? (player.mutationDmgBonus ? player.mutationDmgBonus/20 : 0) + (player.eldritchDmgBonus || 0) : 0)) * abilityPenaltyFactor(abilityRequirementDeficit(spell));
+  const dmgMult = (1 + (player.spellDmgBonus || 0) + (abilityPoolOf(spell.id) === 'technique' ? (player.techniqueDmgBonus || 0) : 0) + (abilityPoolOf(spell.id) === 'mutation' ? (player.mutationDmgBonus ? player.mutationDmgBonus/20 : 0) + (player.eldritchDmgBonus || 0) : 0)) * abilityPenaltyFactor(abilityRequirementDeficit(spell)) * playerLevelPowerMult(player.level);
   // martial techniques push the wielded weapon far past normal use -- unlike plain attacks,
   // these do chip away at durability (see doAttack() for the equivalent crit-only weapon wear).
   if (abilityPoolOf(spell.id) === 'technique' && ['damage','execute','smite','drain'].includes(spell.type) && player.equipment.hand) {
@@ -6658,7 +8072,7 @@ function castSpell(spellId) {
     const t = nearestHostile(spell.range);
     if (!t) { log('No target in range.'); return; }
     player.hp -= selfCost;
-    const dmg = Math.round(randInt(Math.random, spell.power[0], spell.power[1]) * (1 + (player.spellDmgBonus||0)));
+    const dmg = Math.round(randInt(Math.random, spell.power[0], spell.power[1]) * (1 + (player.spellDmgBonus||0)) * playerLevelPowerMult(player.level));
     t.hp -= dmg;
     log(`You tap your own life force! ${t.name} takes ${dmg} dark damage (-${selfCost} HP).`);
     if (t.hp <= 0) onDeath(t, player);
@@ -6783,7 +8197,7 @@ function castSpell(spellId) {
   }
   if (spell.type === 'heal') {
     if (!paySpellCost(spell)) { log('Not enough resource.'); return; }
-    const amt = randInt(Math.random, spell.power[0], spell.power[1]);
+    const amt = Math.round(randInt(Math.random, spell.power[0], spell.power[1]) * playerLevelPowerMult(player.level));
     player.hp = Math.min(player.maxHp, player.hp + amt);
     log(`You are healed for ${amt}.`);
     endTurn(); return;
@@ -6803,7 +8217,11 @@ function castSpell(spellId) {
   }
   if (spell.type === 'buff') {
     if (!paySpellCost(spell)) { log('Not enough resource.'); return; }
-    applyBuff(spell.stat, spell.power, spell.dur);
+    // only scale genuinely numeric combat-stat buffs -- 'invis'/'summon' use power as a flag
+    // (1 = on), not a magnitude, and must not be multiplied.
+    const scalableBuffStats = new Set(['armor', 'str', 'dex', 'regen', 'int']);
+    const power = scalableBuffStats.has(spell.stat) ? Math.round(spell.power * playerLevelPowerMult(player.level)) : spell.power;
+    applyBuff(spell.stat, power, spell.dur);
     endTurn(); return;
   }
   if (spell.type === 'corpseblast') {
@@ -6813,7 +8231,7 @@ function castSpell(spellId) {
     if (!hit.length) { log('No foes near the corpse to harm.'); return; }
     if (!paySpellCost(spell)) { log('Not enough mana.'); return; }
     removeItemAt(corpse.x, corpse.y, corpse.item.uid);
-    const dmgMult = 1 + (player.spellDmgBonus || 0);
+    const dmgMult = (1 + (player.spellDmgBonus || 0)) * playerLevelPowerMult(player.level);
     hit.forEach(t => {
       const dmg = Math.round(randInt(Math.random, spell.power[0], spell.power[1]) * dmgMult);
       t.hp -= dmg;
@@ -6939,7 +8357,7 @@ function resolveSpellAtTile(spell, wx, wy) {
     log(hitCount ? `${spell.name} erupts, catching ${hitCount} in the blast!` : `${spell.name} erupts against empty ground.`);
     if (spell.knockback) hitEntities.forEach(e => knockbackEntity(e, wx, wy, spell.knockback));
     if (spell.gravityPull) hitEntities.forEach(e => gravityPullEntity(e, wx, wy, spell.gravityPull));
-    if (spell.chainLightning && hitEntities.length) chainLightningFrom(spell, hitEntities[0].x, hitEntities[0].y, new Set(hitEntities), 3, 0.65);
+    if (spell.chainLightning && hitEntities.length) chainLightningFrom(spell, hitEntities[0].x, hitEntities[0].y, new Set(hitEntities), 3, (1 + (player.spellDmgBonus||0)) * playerLevelPowerMult(player.level) * 0.65);
     return;
   }
   if (spell.pierceLine) {
@@ -6961,7 +8379,7 @@ function resolveSpellAtTile(spell, wx, wy) {
     if (e.alive !== false && e.hp > 0) {
       if (spell.knockback) knockbackEntity(e, player.x, player.y, spell.knockback);
       if (spell.gravityPull) gravityPullEntity(e, player.x, player.y, spell.gravityPull);
-      if (spell.chainLightning) chainLightningFrom(spell, e.x, e.y, new Set([e]), 3, 0.65);
+      if (spell.chainLightning) chainLightningFrom(spell, e.x, e.y, new Set([e]), 3, (1 + (player.spellDmgBonus||0)) * playerLevelPowerMult(player.level) * 0.65);
     }
   }
   else log(`${spell.name} strikes empty ground.`);
@@ -6977,7 +8395,7 @@ function newPlayer() {
     // actually differentiates classes at level 1 -- HP now scales off CON and MP off INT instead of
     // every archetype sharing the same flat 26/16 regardless of how tanky or squishy it's meant to be.
     str: 8, dex: 8, int: 8, con: 8, wis: 8,
-    level: 1, xp: 0, xpNext: 30, statPoints: 0, talentPoints: 0, talents: {},
+    level: 1, xp: 0, xpNext: xpNeededForLevel(1), statPoints: 0, talentPoints: 0, talents: {},
     maxHp: 28, hp: 28, maxMp: 16, mp: 16, gold: 40,
     maxStamina: 90, stamina: 90, secondWindMax: 0, secondWindCharges: 0,
     maxCharge: 60, charge: 60, corruption: 0,
@@ -6988,7 +8406,11 @@ function newPlayer() {
     mutations: [],
     buffs: {}, statusPoison: 0, statusFear: 0, statusConfuse: 0, alive: true, kind: 'player', name: 'You',
     allies: [], companions: [], quests: [], killCounts: {}, spouse: null, kids: 0, children: [], lastChildTurn: -9999,
+    story: null,
+    dimensionId: null, dimensionReturn: null, discoveredDimensions: [],
+    gameCompleted: false, completionTurn: null,
     invFilter: 'all', invPage: 0, bounties: {}, scenario: null, waypoints: [], discoveredKingdoms: [],
+    quickslots: [null, null, null, null],
     knownSettlements: [], knownDungeons: [], customNames: {},
   };
 }
@@ -7032,6 +8454,7 @@ function doAttack(att, def) {
     return;
   }
   let dmg = randInt(Math.random, dmgRange[0], dmgRange[1]) + Math.floor(effStr(att) / 4);
+  if (isPlayer) dmg += Math.floor(player.level / 5);
   if (isPlayer && weapon) dmg = Math.round(dmg * abilityPenaltyFactor(weaponStrDeficit()));
   if (isPlayer && weapon && weapon.broken) dmg = Math.round(dmg * 0.35);
   if (isPlayer) {
@@ -7060,6 +8483,7 @@ function doAttack(att, def) {
   if (Math.random() < critChance) { dmg *= (2 + (isPlayer ? (player.critDmgBonus || 0) : 0)); crit = true; }
   dmg = Math.max(1, Math.round(dmg));
   def.hp -= dmg;
+  if (isPlayer) def.harmedByPlayer = true;
   // ---- v3 durability wear: only on crits (weapon under exceptional strain) and heavy hits
   // taken (armor absorbing serious punishment), plus corrosive attackers -- never on routine hits.
   if (isPlayer && crit && weapon) wearItem(weapon, 1);
@@ -7197,6 +8621,16 @@ function monsterAI(m) {
     m.atk = [Math.round(m.atk[0] * 1.4), Math.round(m.atk[1] * 1.4)];
     m.dex = Math.round(m.dex * 1.15);
     log(`${m.name} flies into a berserk rage!`);
+  }
+
+  // ---- scripted story bosses: bespoke multi-phase AI takes over the whole turn ----
+  if (m.scriptedAI && STORY_BOSS_AI[m.scriptedAI]) {
+    if (!m.engageLineShown && (seesPlayer || dist <= 6)) {
+      m.engageLineShown = true;
+      if (m.engageLine) log(`${m.name}: "${m.engageLine}"`);
+      Sound.play('guardAlert');
+    }
+    if (STORY_BOSS_AI[m.scriptedAI](m, dist, seesPlayer)) return;
   }
 
   // ---- ambush: invisible/passive until the player is right on top of it ----
@@ -7407,6 +8841,299 @@ function generateChunk(cx, cy) {
   return chunk;
 }
 
+// ============================================================================
+// ---- DIMENSIONS ENGINE (generalized in Phase 9) ---------------------------
+// Phase 3 built the Abyssal Wastes as a working proof of concept; this pass
+// generalizes that into a real, reusable engine so each additional dimension
+// (there are two now, with more to come) is a data entry plus a small amount
+// of glue, not a copy-pasted near-duplicate of the last one. Concretely:
+// dimensions can now have any fill biome (not hardcoded 'ashfields'), any
+// number of interior sub-dungeons (each using the game's real dungeon
+// generator), and any unlock trigger -- a boss kill (Abyssal Wastes) or a
+// pure discovery/interaction (the Lucid Expanse's dream altar), both funnel
+// through the same unlockDimension() core. Portal tiles remember which
+// dimension they lead to, so travelThroughRift() no longer hardcodes a
+// destination. curTileAt/curMonsters/curNPCs dispatch here exactly as
+// before, so combat, looting, and movement all just work.
+// ============================================================================
+
+const dimensionChunks = new Map();
+function dimChunkKey(dimId, cx, cy) { return dimId + '|' + cx + ',' + cy; }
+// Every dimension-placed sub-dungeon gets registered here (id, which dimension it belongs to,
+// and where) so save/load recovery can regenerate any of them generically instead of needing a
+// hardcoded special case per dungeon, the way the original Brass Citadel handling did.
+const DIMENSION_SUBDUNGEONS = [];
+
+const ABYSSAL_BIOMES = {
+  ashfields:        { name:'Ashfields',        walkable:true,  glyph:'.', color:'#a8785a', bg:'#2a1810', encounter:[['imp',5],['hellhound',4],['tormented_soul',3]] },
+  brimstone_chasm:  { name:'Brimstone Chasm',   walkable:true,  glyph:'.', color:'#d4600a', bg:'#3a1000', encounter:[['hellhound',5],['brimstone_stalker',4],['imp',3]] },
+  bone_forest:      { name:'Bone Forest',       walkable:true,  glyph:'"', color:'#c9c0a8', bg:'#1a1410', encounter:[['tormented_soul',5],['bone_horror',3],['imp',2]] },
+  obsidian_spires:  { name:'Obsidian Spires',   walkable:false, glyph:'^', color:'#1a1420', bg:'#0a0812', encounter:[] },
+  molten_lava:      { name:'Molten Lava',       walkable:false, glyph:'~', color:'#e8600a', bg:'#2a0800', encounter:[] },
+};
+function classifyAbyssalBiome(elev, heat) {
+  if (elev > 0.68) return 'obsidian_spires';
+  if (heat > 0.66) return 'molten_lava';
+  if (elev < 0.32) return 'brimstone_chasm';
+  if (heat > 0.55) return 'ashfields';
+  return 'bone_forest';
+}
+
+// ---- The Lucid Expanse: dimension #2. Where the Abyssal Wastes is entered by force (clear a
+// dungeon, kill its guardian), this one is entered by discovery -- find a peaceful "Dream
+// Sanctum" dungeon (no hostile final boss) and rest at the altar inside it. Different mechanic
+// on purpose, matching the original brief's call for varied ways into each dimension. ----
+const DREAM_BIOMES = {
+  floating_gardens: { name:'Floating Gardens', walkable:true,  glyph:'"', color:'#9adc6a', bg:'#182a1a', encounter:[['figment',5],['echo_child',3]] },
+  the_unraveling:   { name:'The Unraveling',   walkable:true,  glyph:'%', color:'#d060e0', bg:'#1a0a2a', encounter:[['unraveled_thing',5],['night_terror',4],['figment',2]] },
+  childhood_echo:   { name:'Childhood Echo',   walkable:true,  glyph:'.', color:'#c9c9e0', bg:'#161628', encounter:[['echo_child',5],['figment',3]] },
+  mirror_lake:      { name:'Mirror Lake',      walkable:false, glyph:'~', color:'#6ab0e0', bg:'#0a1828', encounter:[] },
+  the_void_between: { name:'The Void Between', walkable:false, glyph:' ', color:'#0a0a14', bg:'#000005', encounter:[] },
+};
+function classifyDreamBiome(elev, heat) {
+  if (elev > 0.72) return 'the_void_between';
+  if (heat > 0.68) return 'mirror_lake';
+  if (elev < 0.30) return 'the_unraveling';
+  if (heat > 0.50) return 'childhood_echo';
+  return 'floating_gardens';
+}
+MONSTER_BASES.figment = { name:'Figment', glyph:'f', color:'#c9c9e0', hp:14, str:6, dex:14, atk:[1,4], armor:0, xp:11, behavior:'flee', dtier:1, faction:'dream' };
+MONSTER_BASES.echo_child = { name:'Echo of a Child', glyph:'e', color:'#e0e0f0', hp:24, str:9, dex:11, atk:[2,6], armor:0, xp:19, behavior:'ranged', dtier:2, faction:'dream', causesFear:true };
+MONSTER_BASES.night_terror = { name:'Night Terror', glyph:'n', color:'#5a1a7a', hp:40, str:15, dex:13, atk:[4,10], armor:2, xp:34, behavior:'ambush', ambushRange:2, dtier:3, faction:'dream' };
+MONSTER_BASES.unraveled_thing = { name:'Unraveled Thing', glyph:'u', color:'#d060e0', hp:52, str:16, dex:10, atk:[5,11], armor:1, xp:42, behavior:'aggressive', dtier:3, faction:'dream' };
+
+const DIMENSIONS = {
+  abyssal_wastes: {
+    id: 'abyssal_wastes', name: 'the Abyssal Wastes', tint: '#ff3a1a',
+    biomes: ABYSSAL_BIOMES, classify: classifyAbyssalBiome, noiseSalt: 913371, fillBiome: 'ashfields',
+    arrival: { cx: 0, cy: 0, lx: 12, ly: 12 },
+    subDungeons: [{ key:'citadel', cx: 3, cy: -2, lx: 12, ly: 12, id:'dim_brass_citadel', theme:'brass_citadel',
+      entranceName:'the Brass Citadel gate', entranceGlyph:'=', entranceColor:'#c9902a', decorateStyle:'fortress' }],
+    entryFlavor: 'The air burns in your lungs. Ash falls like slow snow across a horizon lit by nothing but distant fire.',
+  },
+  lucid_expanse: {
+    id: 'lucid_expanse', name: 'the Lucid Expanse', tint: '#b090ff',
+    biomes: DREAM_BIOMES, classify: classifyDreamBiome, noiseSalt: 447213, fillBiome: 'floating_gardens',
+    arrival: { cx: 0, cy: 0, lx: 12, ly: 12 },
+    subDungeons: [{ key:'palace', cx: -2, cy: 3, lx: 12, ly: 12, id:'dim_recurring_palace', theme:'recurring_palace',
+      entranceName:'a door that was not there a moment ago', entranceGlyph:'+', entranceColor:'#b090ff', decorateStyle:'ruins' }],
+    entryFlavor: 'The ground does not quite hold still. Colors run a half-second behind where they should be. You are dreaming, and you know it, and that changes nothing about how real it feels.',
+  },
+};
+
+// Static lookup (works even immediately after a fresh page load, before anything has actually
+// been generated this session) -- scans the DIMENSIONS config directly rather than relying on
+// DIMENSION_SUBDUNGEONS, which only gets populated once a sub-dungeon has actually been placed.
+function findDimensionSubDungeonConfig(dungeonId) {
+  for (const dimId in DIMENSIONS) {
+    const dim = DIMENSIONS[dimId];
+    const sub = dim.subDungeons.find(s => s.id === dungeonId);
+    if (sub) return { dim, sub };
+  }
+  return null;
+}
+
+function generateDimensionChunk(dimId, cx, cy) {
+  const dim = DIMENSIONS[dimId];
+  const fill = dim.biomes[dim.fillBiome];
+  const tiles = [];
+  for (let ly = 0; ly < CH; ly++) {
+    const row = [];
+    for (let lx = 0; lx < CH; lx++) {
+      const wx = cx * CH + lx, wy = cy * CH + ly;
+      const elev = fbm(wx, wy, 60, SEED + dim.noiseSalt, 3);
+      const heat = fbm(wx, wy, 50, SEED + dim.noiseSalt + 777, 2);
+      const biomeId = dim.classify(elev, heat);
+      const b = dim.biomes[biomeId];
+      row.push({ biome: biomeId, glyph: b.glyph, color: b.color, bg: b.bg, walkable: b.walkable, feature: null, items: [] });
+    }
+    tiles.push(row);
+  }
+  const chunk = { cx, cy, tiles, npcs: [], monsters: [], settlement: null, dungeonEntrance: null, poi: null };
+  const rng = mulberry32((cx * 928371 + cy * 12841 + SEED + dim.noiseSalt) | 0);
+
+  // arrival chunk: guarantee a walkable landing spot with a permanent return portal
+  if (cx === dim.arrival.cx && cy === dim.arrival.cy) {
+    const t = tiles[dim.arrival.ly][dim.arrival.lx];
+    t.walkable = true; t.biome = dim.fillBiome; t.glyph = '\u25C9'; t.color = dim.tint; t.bg = '#0a0a12'; t.feature = 'rift_portal'; t.dimensionId = dimId;
+    forceFillArea(tiles, dim.arrival.lx, dim.arrival.ly, fill, 'rift_portal');
+  }
+  // interior sub-dungeons: real dungeon entrances placed at fixed dimension coordinates, using
+  // the game's normal dungeon pipeline -- optional, deeper content once you're already through.
+  for (const sub of dim.subDungeons) {
+    if (cx === sub.cx && cy === sub.cy) placeDimensionSubDungeon(chunk, cx, cy, sub, dim, fill);
+  }
+
+  if (!chunk.dungeonEntrance) {
+    const spawnCount = randInt(rng, 1, 3);
+    for (let i = 0; i < spawnCount; i++) {
+      const lx = randInt(rng, 1, CH - 2), ly = randInt(rng, 1, CH - 2);
+      const t = tiles[ly][lx];
+      if (!t.walkable || t.feature) continue;
+      const b = dim.biomes[t.biome];
+      if (!b.encounter.length) continue;
+      const mid = weightedChoice(rng, b.encounter);
+      chunk.monsters.push(makeMonster(mid, cx * CH + lx, cy * CH + ly, 3 + Math.floor((Math.abs(cx) + Math.abs(cy)) / 6), rng));
+    }
+    if (rng() < 0.08) {
+      const lx = randInt(rng, 1, CH - 2), ly = randInt(rng, 1, CH - 2);
+      const t = tiles[ly][lx];
+      if (t.walkable && !t.feature) {
+        const materialIds = ITEM_BASES.filter(b => b.type === 'material').map(b => b.id);
+        t.items.push(makeItem(choice(rng, materialIds.length ? materialIds : ['ore']), 0, rng));
+      }
+    }
+  }
+  return chunk;
+}
+// Clears a small guaranteed-safe area around a special tile (arrival point, dungeon entrance) so
+// it's never accidentally boxed in by an unwalkable biome roll, using whichever biome the
+// dimension considers its "normal ground" rather than a hardcoded one.
+function forceFillArea(tiles, lx, ly, fillBiomeDef, exceptFeature) {
+  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    const nt = tiles[ly + dy] && tiles[ly + dy][lx + dx];
+    if (nt && !nt.walkable && nt.feature !== exceptFeature) {
+      nt.walkable = true; nt.glyph = fillBiomeDef.glyph === '\u25C9' ? '.' : fillBiomeDef.glyph;
+      nt.color = fillBiomeDef.color; nt.bg = fillBiomeDef.bg;
+    }
+  }
+}
+function getDimensionChunk(dimId, cx, cy) {
+  const key = dimChunkKey(dimId, cx, cy);
+  let c = dimensionChunks.get(key);
+  if (c) return c;
+  c = generateDimensionChunk(dimId, cx, cy);
+  dimensionChunks.set(key, c);
+  return c;
+}
+function getDimensionTile(dimId, wx, wy) {
+  const cx = Math.floor(wx / CH), cy = Math.floor(wy / CH);
+  const lx = ((wx % CH) + CH) % CH, ly = ((wy % CH) + CH) % CH;
+  return getDimensionChunk(dimId, cx, cy).tiles[ly][lx];
+}
+
+// Generic interior-dungeon placement -- reuses the exact same dungeon registration the overworld
+// uses (dungeonRegistry, decorateDungeonEntrance), just at a fixed dimension coordinate instead
+// of a random overworld chunk, so it's a real dungeon, not a fake one. Any dimension can list any
+// number of these in its subDungeons array.
+function placeDimensionSubDungeon(chunk, cx, cy, sub, dim, fill) {
+  const t = chunk.tiles[sub.ly][sub.lx];
+  t.walkable = true; t.biome = dim.fillBiome; t.color = fill.color; t.bg = fill.bg;
+  forceFillArea(chunk.tiles, sub.lx, sub.ly, fill, null);
+  const meta = DUNGEON_THEMES[sub.theme];
+  const rng = mulberry32((cx * 3331 + cy * 9091 + SEED + 77321) | 0);
+  const variant = rollDungeonVariant(rng, 12);
+  const maxDepth = meta.depthRange[1];
+  const targetPower = Math.max(1, Math.min(6, (meta.dtierMax || 2) + Math.floor(maxDepth / 4) + variant.powerMod));
+  const recommendedLevel = recommendedLevelForPower(targetPower);
+  decorateDungeonEntrance(chunk, sub.lx, sub.ly, sub.decorateStyle);
+  t.glyph = sub.entranceGlyph; t.color = sub.entranceColor; t.feature = 'dungeon_entrance'; t.dungeonId = sub.id;
+  chunk.dungeonEntrance = { id: sub.id, theme: sub.theme, maxDepth, tier: 'rare', name: meta.name, entranceName: sub.entranceName, x: cx*CH+sub.lx, y: cy*CH+sub.ly, variant: variant.id, recommendedLevel };
+  if (!dungeonRegistry.has(sub.id)) {
+    dungeonRegistry.set(sub.id, { id: sub.id, theme: sub.theme, maxDepth, tier: 'rare', name: meta.name, entranceName: sub.entranceName, levels: [], x: cx*CH+sub.lx, y: cy*CH+sub.ly, variant: variant.id, targetPower, recommendedLevel, originMode: 'dimension', originDimensionId: dim.id });
+  }
+  if (!DIMENSION_SUBDUNGEONS.some(d => d.id === sub.id)) DIMENSION_SUBDUNGEONS.push({ id: sub.id, dimId: dim.id, cx, cy });
+}
+
+// Generic dimension-unlock core: registers discovery, places a permanent portal tile (tagged with
+// which dimension it leads to), grants a reward, and pokes the Main Quest bridge stage. Both
+// unlock paths (a boss kill, or a peaceful discovery) funnel through this.
+function unlockDimension(dimId, atGrid, x, y, opts) {
+  opts = opts || {};
+  player.discoveredDimensions = player.discoveredDimensions || [];
+  const already = player.discoveredDimensions.includes(dimId);
+  if (!already) player.discoveredDimensions.push(dimId);
+  if (atGrid && atGrid[y] && atGrid[y][x]) {
+    atGrid[y][x] = { glyph: '\u25C9', walkable: true, color: DIMENSIONS[dimId].tint, bg: '#0a0a12', feature: 'rift_portal', dimensionId: dimId, items: [] };
+  }
+  if (!already) {
+    gainXP(opts.xp || 400); player.gold += opts.gold || 250;
+    Sound.play('discovery');
+    log(opts.message || `*** A rift now leads into ${DIMENSIONS[dimId].name} -- step onto it and use the enter command to cross over. ***`);
+    checkMainQuestDimensions();
+  }
+}
+// Called from onDeath() the moment Malphegor falls.
+function unlockAbyssalWastes(def) {
+  const lvl = curDungeonLevel();
+  unlockDimension('abyssal_wastes', lvl ? lvl.grid : null, def.x, def.y,
+    { xp: 500, gold: 300, message: '*** The gate Malphegor guarded tears open. A rift now leads into the Abyssal Wastes -- step onto it and use the enter command to cross over. ***' });
+}
+// The Antagonist's death doesn't end the story -- it reveals what was actually behind them.
+// GOD spawns at the same spot, continuing the encounter directly, no separate area required.
+function triggerGodReveal(def) {
+  log(`*** ${def.name}'s form flickers -- wrong, for just a moment, like a texture failing to load. ***`);
+  log(`*** "You were never meant to see behind this," something says, in a voice that was never ${def.name}'s at all. ***`);
+  log('*** The world holds very, very still. ***');
+  const spot = findOpenAdjacent(def.x, def.y) || { x: def.x, y: def.y };
+  const godMon = makeMonster('god', spot.x, spot.y, 14, Math.random);
+  godMon.engaged = true;
+  addMonsterToWorld(godMon);
+  Sound.play('summon');
+  log(`*** ${godMon.name} has appeared. ***`);
+}
+// The actual ending -- and, per the original design, not really an ending: the game does not
+// lock, end, or take control away. It records the run and lets the player keep playing.
+function triggerSimulationReveal(def) {
+  if (player.gameCompleted) return; // idempotent -- a repeat kill (e.g. after a future NG+) shouldn't re-fire the whole sequence
+  player.gameCompleted = true;
+  player.completionTurn = turnCount;
+  gainXP(50000); player.gold += 10000;
+  Sound.play('levelUp');
+  log('*** ... ***');
+  log('*** The light in the room does not fade so much as resolve -- like a picture snapping into focus for the first time. ***');
+  log('*** Every wall, every leaf, every face you have ever passed in this world holds still, then peels back gently at the edges, revealing rows of quiet light underneath, patient as a held breath. ***');
+  log(`*** GOD was never a god. It was the thing quietly running everything -- every kingdom, every dungeon, every name you were given. It does not seem angry that you found this. If anything, it seems relieved. ***`);
+  log('*** You are free to keep going. Nothing here was ever less real for having been built. ***');
+  recordHallOfLegends();
+}
+function recordHallOfLegends() {
+  try {
+    const key = 'lucid_dreams_of_roguelike_hall_of_legends_v1';
+    let hall = [];
+    try { hall = JSON.parse(localStorage.getItem(key)) || []; } catch (e) {}
+    hall.push({ name: player.name || player.scenario || 'an unnamed adventurer', level: player.level, turns: turnCount, seed: SEED, antagonist: player.story ? player.story.antagonist : null, date: Date.now() });
+    localStorage.setItem(key, JSON.stringify(hall.slice(-50)));
+  } catch (e) {}
+}
+function getHallOfLegends() {
+  try { return JSON.parse(localStorage.getItem('lucid_dreams_of_roguelike_hall_of_legends_v1')) || []; } catch (e) { return []; }
+}
+// Called when the player interacts with a Dream Sanctum's slumbering altar -- a pure discovery
+// unlock, no combat required, deliberately different from the Abyssal Wastes' gated entry.
+function useSlumberingAltar() {
+  const lvl = curDungeonLevel();
+  const alreadyKnown = (player.discoveredDimensions || []).includes('lucid_expanse');
+  unlockDimension('lucid_expanse', lvl ? lvl.grid : null, player.x, player.y,
+    { xp: 400, gold: 200, message: "*** You lie down at the altar. Sleep comes fast and strange, and when you open your eyes the dream hasn't ended -- it's just let you in. A rift to the Lucid Expanse remains here, waiting. ***" });
+  if (!alreadyKnown) travelThroughRift();
+}
+
+// Steps the player through a rift_portal tile in either direction, remembering exactly where to
+// return to (overworld tile, or the specific dungeon+depth) so re-entry is never a surprise. The
+// destination dimension is read off the portal tile itself (dimensionId), not hardcoded, so this
+// works unmodified for every dimension the game ever adds.
+function travelThroughRift() {
+  if (!curIsDimension()) {
+    const t = curTileAt(player.x, player.y);
+    const dimId = (t && t.dimensionId) || 'abyssal_wastes';
+    player.dimensionReturn = { mode: player.mode, x: player.x, y: player.y, dungeonId: player.dungeonId, dungeonDepth: player.dungeonDepth };
+    player.mode = 'dimension'; player.dimensionId = dimId;
+    const a = DIMENSIONS[dimId].arrival;
+    player.x = a.cx * CH + a.lx; player.y = a.cy * CH + a.ly;
+    Sound.play('gate');
+    log(`*** You step through the rift into ${DIMENSIONS[dimId].name}. ${DIMENSIONS[dimId].entryFlavor} ***`);
+  } else {
+    const r = player.dimensionReturn || { mode: 'overworld', x: player.x, y: player.y };
+    player.mode = r.mode; player.dungeonId = r.dungeonId || null; player.dungeonDepth = r.dungeonDepth || 0;
+    player.x = r.x; player.y = r.y; player.dimensionId = null;
+    Sound.play('gate');
+    log('*** You step back through the rift, the world outside settling back into place. ***');
+  }
+}
+
+
+
 // ---- dungeon generation v6: hazard tiles per theme (traps/poison/water) + cyber/eldritch loot bias ----
 function generateDungeonLevel(theme, depth, maxDepth, variantId) {
   const meta = DUNGEON_THEMES[theme] || { genre: 'rooms', dtierMax: 2, tier: 'common' };
@@ -7459,9 +9186,31 @@ function generateDungeonLevel(theme, depth, maxDepth, variantId) {
     const bestDiff = Math.abs((MONSTER_BASES[pickFrom[0]].bossPower||3) - targetPower);
     const closest = pickFrom.filter(k => Math.abs((MONSTER_BASES[k].bossPower||3) - targetPower) <= bestDiff + 1);
     const bc = down;
-    const boss = makeMonster(choice(rng, closest.length ? closest : bossCandidates), Math.max(1,bc.x-1), bc.y, depth+2, rng);
-    level.monsters.push(boss);
-    if (maxDepth >= 6) {
+    // ---- Dream Sanctum: deliberately peaceful. No boss guards the way into the Lucid Expanse --
+    // you find it by resting, not by fighting. See useSlumberingAltar() / DIMENSIONS.lucid_expanse. ----
+    if (theme === 'dream_sanctum') {
+      grid[bc.y][bc.x] = { glyph: '\u25C8', walkable: true, color: '#b090ff', bg: '#140a2a', feature: 'slumbering_altar', items: [] };
+    } else {
+      let boss = makeMonster(choice(rng, closest.length ? closest : bossCandidates), Math.max(1,bc.x-1), bc.y, depth+2, rng);
+      // ---- Malphegor, the Rift-Warden: a hand-authored, always-the-same gatekeeper boss, not left
+      // to the procedural power-matching roll above. Guarding the Demon Gate specifically (and only
+      // there) is what makes defeating him mean something -- and what opens the way into the
+      // Abyssal Wastes dimension afterward. See DIMENSIONS.abyssal_wastes / unlockAbyssalWastes(). ----
+      if (theme === 'demon_gate' && MONSTER_BASES.archdemon_malphegor) {
+        boss = makeMonster('archdemon_malphegor', Math.max(1, bc.x - 1), bc.y, depth + 2, rng);
+      }
+      // ---- The Antagonist: whoever the procedural story named as its villain (see
+      // generateMainQuest's `antagonist` name) is not just a name attached to reused bosses --
+      // they're a real, fixed, uniquely-scripted final confrontation waiting at the Threshold.
+      // Their death is what reveals what's actually behind them. See STORY_BOSS_AI.the_antagonist
+      // and the onDeath hook that triggers triggerGodReveal(). ----
+      if (theme === 'gods_threshold' && MONSTER_BASES.the_antagonist) {
+        boss = makeMonster('the_antagonist', Math.max(1, bc.x - 1), bc.y, depth + 2, rng);
+        if (player.story && player.story.antagonist) boss.name = player.story.antagonist;
+      }
+      level.monsters.push(boss);
+    }
+    if (maxDepth >= 6 && theme !== 'dream_sanctum') {
       grid[down.y][down.x] = { glyph: '\u2666', walkable: true, color: '#e8ab52', bg: '#1a140a', feature: 'waystone' };
       level.hasWaystone = true;
     }
@@ -8104,8 +9853,8 @@ function endTurn() {
   checkKingdomDiscovery();
   checkFastTravelDiscovery();
 
-  for (const a of curAllies().slice()) allyAI(a);
-  for (const m of curMonsters().slice()) { if (m.alive) monsterAI(m); }
+  for (const a of curAllies().slice()) { if (!player.alive || player.hp <= 0) break; allyAI(a); }
+  for (const m of curMonsters().slice()) { if (!player.alive || player.hp <= 0) break; if (m.alive) monsterAI(m); }
   if (!player.alive || player.hp <= 0) { gameOver(); return; }
   for (const n of curNPCs().slice()) { if (n.alive) npcAI(n); }
   if (!player.alive || player.hp <= 0) { gameOver(); return; }
@@ -8597,9 +10346,19 @@ function updateSidebar() {
   document.getElementById('stats-list').innerHTML = `STR ${player.str} &nbsp; DEX ${player.dex} &nbsp; INT ${player.int}<br>CON ${player.con} &nbsp; WIS ${player.wis} &nbsp; AC ${getArmorOf(player)}`;
   const eq = player.equipment;
   document.getElementById('equip-list').innerHTML = SLOT_ORDER.map(k => `${k}: ${eq[k] ? eq[k].name : '-'}`).join('<br>');
+  player.quickslots = player.quickslots || [null, null, null, null];
+  document.getElementById('quickslot-list').innerHTML = player.quickslots.map((uid, i) => {
+    const it = uid ? player.inventory.find(x => x.uid === uid) : null;
+    if (uid && !it) player.quickslots[i] = null; // item was consumed/dropped since being assigned
+    return `<span style="cursor:pointer;color:${it ? 'var(--amber-bright)' : 'var(--text-dim)'}" onclick="simulateKey('${i+1}')">[${i+1}] ${it ? it.name : '(empty)'}</span>`;
+  }).join('<br>');
   let base;
   if (curIsDungeon()) {
     base = `${curDungeon().name} - Depth ${player.dungeonDepth}/${curDungeon().maxDepth}`;
+  } else if (curIsDimension()) {
+    const t = curTileAt(player.x, player.y);
+    const dim = DIMENSIONS[player.dimensionId];
+    base = `${t && dim ? dim.biomes[t.biome].name : 'Unknown'} — ${dim ? dim.name : 'an alternate dimension'}`;
   } else {
     const t = curTileAt(player.x, player.y);
     const c = getChunk(Math.floor(player.x/CH), Math.floor(player.y/CH));
@@ -8641,6 +10400,10 @@ function getSaveData() {
 function saveGame(isAuto) {
   try {
     if (typeof localStorage === 'undefined') { if (!isAuto) log('Saving is not available in this environment.'); return false; }
+    // never (re)write a save for a dead character -- gameOver() already deletes the save the
+    // moment the player dies, and this guard makes sure nothing (a stray autosave tick, a
+    // straggling turn from an ally/companion, etc.) can accidentally recreate it afterward.
+    if (player.alive === false || player.hp <= 0 || gameState === 'gameover') { if (!isAuto) log("Can't save now."); return false; }
     localStorage.setItem(SAVE_KEY, JSON.stringify(getSaveData()));
     log(isAuto ? 'Autosaved.' : 'Game saved.');
     return true;
@@ -8665,12 +10428,16 @@ function applyLoadedSave(data) {
   SEED = data.seed;
   turnCount = data.turnCount || 0;
   zoomIndex = (data.zoomIndex !== undefined) ? data.zoomIndex : 5;
-  player = Object.assign(newPlayer(), data.player);
-  // recover dungeon state if the player was mid-dungeon when saved
+  player = Object.assign(newPlayer(), data.player);  // recover dungeon state if the player was mid-dungeon when saved
   if (player.mode === 'dungeon' && player.dungeonId) {
-    const parts = player.dungeonId.split('_');
-    const cx = parseInt(parts[1], 10), cy = parseInt(parts[2], 10);
-    if (!isNaN(cx) && !isNaN(cy)) getChunk(cx, cy);
+    const subMatch = findDimensionSubDungeonConfig(player.dungeonId);
+    if (subMatch) {
+      getDimensionChunk(subMatch.dim.id, subMatch.sub.cx, subMatch.sub.cy);
+    } else {
+      const parts = player.dungeonId.split('_');
+      const cx = parseInt(parts[1], 10), cy = parseInt(parts[2], 10);
+      if (!isNaN(cx) && !isNaN(cy)) getChunk(cx, cy);
+    }
     const dg = dungeonRegistry.get(player.dungeonId);
     if (dg) { if (!dg.levels[player.dungeonDepth - 1]) dg.levels[player.dungeonDepth - 1] = generateDungeonLevel(dg.theme, player.dungeonDepth, dg.maxDepth, dg.variant); }
     else {
@@ -8681,6 +10448,7 @@ function applyLoadedSave(data) {
     }
   }
   gameState = 'playing';
+  document.getElementById('title-screen').classList.add('hidden');
   document.getElementById('modal').classList.add('hidden');
   log('Game loaded. Welcome back.');
   markSeen();
@@ -8875,6 +10643,7 @@ function showTitleScreen() {
   html += `<div class="title-menu-opt" onclick="simulateKey('c')"><b>[c]</b> Settings</div>`;
   html += `<div class="title-menu-opt" onclick="simulateKey('d')"><b>[d]</b> Guide &amp; Controls</div>`;
   if (save) html += `<div class="title-menu-opt" onclick="simulateKey('e')"><b>[e]</b> Delete Save</div>`;
+  if (getHallOfLegends().length) html += `<div class="title-menu-opt" onclick="simulateKey('f')"><b>[f]</b> Hall of Legends</div>`;
   document.getElementById('title-menu').innerHTML = html;
   spawnTitleEmbers();
 }
@@ -8897,6 +10666,17 @@ function titleScreenChoice(letter) {
   if (letter === 'c') { showSettings('title'); return; }
   if (letter === 'd') { openHelp(); return; }
   if (letter === 'e' && hasSaveGame()) { confirmDeleteSave(); return; }
+  if (letter === 'f' && getHallOfLegends().length) { showHallOfLegends(); return; }
+}
+function showHallOfLegends() {
+  gameState = 'halloflegends';
+  document.getElementById('title-screen').classList.add('hidden');
+  const hall = getHallOfLegends().slice().reverse();
+  const html = hall.map(rec => {
+    const date = new Date(rec.date).toLocaleDateString();
+    return `<div class="modal-opt">Level ${rec.level} adventurer &mdash; defeated ${rec.antagonist ? rec.antagonist : 'GOD'} after ${rec.turns} turns <span class="dim">(${date})</span></div>`;
+  }).join('') || `<div class="npcline dim">No legends recorded yet.</div>`;
+  renderModal('Hall of Legends', html, 'Esc to return to the title screen.');
 }
 function confirmDeleteSave() {
   gameState = 'confirmdelete';
@@ -9024,7 +10804,8 @@ function showArchetypePicker() {
 // and any dungeon they'd already cleared would still be cleared. Shared with the load-game
 // path, which needs the same clearing but keeps its own saved SEED/turnCount afterward.
 function clearWorldRegistries() {
-  worldChunks.clear(); dungeonRegistry.clear(); kingdomRegistry.clear();
+  worldChunks.clear(); dungeonRegistry.clear(); kingdomRegistry.clear(); dimensionChunks.clear(); kingdomRelations.clear();
+  DIMENSION_SUBDUNGEONS.length = 0;
   activeFxTiles = []; activeDecoys = [];
 }
 function resetWorldState() {
@@ -9211,6 +10992,7 @@ function gameOver() {
   gameState = 'gameover';
   player.alive = false;
   Sound.play('playerDeath');
+  deleteSaveGame();
   log('*** YOU HAVE DIED ***');
   const cause = player.deathCause || 'unknown causes';
   const eq = player.equipment;
@@ -9587,8 +11369,68 @@ const GUIDE_SECTIONS = [
     <div class="modal-opt">Crime is regional. Assaulting/killing a peaceful NPC raises a bounty and alerts guards in
     that settlement; high enough bounty makes guards attack on sight there. Bounties decay slowly over time.</div>` },
   { id:'quests', label:'Quests', html: () => `
-    <div class="modal-opt">q opens the Quest Log. Bounty and exploration quests from willing NPCs, auto-completed and
-    rewarded (plus a relationship boost) once the condition is met.</div>` },
+    <div class="modal-opt"><b>Main Quest</b>: a story generated fresh for this world's seed, drawn from 9 possible
+    premises — the antagonist's name, and which of the game's named story bosses fill each beat, vary between
+    playthroughs, and beats now reference real kingdom politics (a "Betrayal" might genuinely name a kingdom yours
+    is at war with). All four acts are fully playable through to a real ending: Act 4 opens by pointing you at a
+    Demon Gate and the dimension beyond it, then leads to the Threshold, where this world's antagonist is waiting
+    for real -- not a stand-in. Progress is automatic — defeat the right boss, clear the right dungeon, set foot in
+    enough kingdoms, or find your way through a rift.</div>
+    <div class="modal-opt" style="margin-top:6px"><b>Side Quests</b>: q opens the Quest Log. Ask willing NPCs for work
+    and pick from 3 rolled offers — bounty, boss bounty (tougher, guarantees a gear reward), gather materials, protect
+    a settlement, deliver word to another kingdom's elder, sabotage or caravan-guard work tied to real kingdom
+    relations, or explore. All auto-complete and reward gold, XP, a relationship boost, and <b>kingdom reputation</b>,
+    which nudges that kingdom's shop prices up or down over time.</div>` },
+  { id:'ending', label:'The Ending', html: () => `
+    <div class="modal-opt">Defeating this world's antagonist at the Threshold doesn't end the story — it reveals
+    what was actually behind them. What follows is fixed, not procedurally generated, no matter which of the 9
+    premises your world rolled: a single, final, 5-phase encounter with a fifty-move pool, meant to be a genuine
+    wall even for a fully-built level 99 character. Winning does not end the game or take control away — you keep
+    your character, your world, and your save exactly as they were, free to keep exploring. Completed runs are
+    recorded in the <b>Hall of Legends</b>, viewable from the title screen.</div>` },
+  { id:'storybosses', label:'Story Bosses', html: () => `
+    <div class="modal-opt">Named bosses roam the overworld (and can be pulled into your Main Quest's later acts).
+    Early game: <b>Thessaly Voss, the Broken Blade</b> (duelist, plains/forest) and <b>Grimsen Oldhollow, the
+    Blightspeaker</b> (corrupted druid, forest/swamp). Mid-late game: <b>Seraphine Duskwarden, the Oathbroken</b>
+    (fallen knight), <b>Ashgrave, the Hollow King</b> (necromancer), <b>Vex-9, the Discarded Iron</b> and <b>The
+    Choir of Rust</b> (two very different war-machines), <b>Skarn Windrender</b> (ranger), <b>Kaelen Frost, the
+    Snowbound Warden</b> (ice warden), and <b>Yog'tha, the Unblinking Eye</b> (eldritch horror). Each has real lore,
+    unique dialogue, and a hand-scripted moveset — they don't use the generic monster AI at all. Expect multiple
+    phases as their HP drops. More join this roster in future updates.</div>` },
+  { id:'dimensions', label:'Dimensions', html: () => `
+    <div class="modal-opt">The world isn't the only world, and there's more than one way in. A rare "Demon Gate"
+    dungeon holds <b>Malphegor, the Rift-Warden</b> at the bottom -- defeat him and the gate tears open into
+    <b>the Abyssal Wastes</b> (ashfields, brimstone chasms, bone forests, obsidian spires, demonic monsters, and its
+    own optional dungeon, the Brass Citadel). A rare, peaceful "Dream Sanctum" works differently: no boss guards it
+    -- rest at the slumbering altar inside and you'll wake into <b>the Lucid Expanse</b> (floating gardens, mirror
+    lakes, unraveling zones, dream-touched monsters, and its own optional dungeon, the Recurring Palace). Step onto
+    a glowing rift tile and use the enter command (&gt;) to cross over, and again to come back -- you'll always
+    return to exactly where you left. This is the first two of many dimensions to come.</div>` },
+  { id:'leveling', label:'Leveling', html: () => `
+    <div class="modal-opt">Level 99 is the real cap, and now an achievable one -- roughly 450,000 total XP across
+    the run, paced so early levels come quickly and the last stretch is a genuine long-game grind. Every level
+    grants +2 stat points (more HP/MP too, scaling with level itself so the gap between level 1 and level 99 is
+    real), a talent point every 3 levels, and a bonus +3 stat points every 10th level. Dungeons and bosses are
+    rated on a power scale from 1 (early game) to 6 (the toughest existing tier); that scale now maps across
+    roughly level 3 to level 98, instead of topping out around level 16 the way it used to. Expect true power-6
+    content -- ancient dragons, Malphegor, Yog'tha, and the like -- to be a real fight even near the level cap.</div>` },
+  { id:'kingdoms', label:'Kingdoms & Politics', html: () => `
+    <div class="modal-opt">Every kingdom now has a trait (militaristic, mercantile, scholarly, isolationist, pious,
+    lawless), a named ruler, and a real multi-beat history including a historical figure NPCs will occasionally bring
+    up in conversation. More importantly: each kingdom has a genuine, fixed political relationship with its
+    neighbors -- war, tension, uneasy peace, a trade pact, or formal alliance -- viewable via the Look Around command.
+    This isn't just flavor. Your reputation ripples across it: staying friendly with a kingdom hostile to where
+    you're currently shopping will cost you at the counter, while standing with an ally helps. Kingdoms at war or
+    tension with a neighbor offer <b>sabotage</b> work against them; kingdoms with a trade pact or alliance offer
+    <b>caravan guard</b> work that raises your standing with both sides at once.</div>` },
+  { id:'itemization', label:'Gear & Item Power', html: () => `
+    <div class="modal-opt">Rarity (common through legendary) still controls how good a dropped item's bonus affixes
+    can be, but it's no longer the whole story. Gear now also scales with the power of whatever dropped it: the exact
+    same weapon dropped by an early wandering bandit and by a true endgame boss will not be remotely the same
+    strength, even at identical rarity. Boss-dropped chests scale the same way -- a chest earned from a deep, powerful
+    boss holds meaningfully better contents than one from an early fight, including more gold. Radiant quest gear
+    rewards scale with your own character level for the same reason. The takeaway: don't expect one lucky early
+    legendary to carry you to level 99 -- you'll want to keep upgrading as you go.</div>` },
   { id:'dungeons', label:'Dungeons', html: () => `
     <div class="modal-opt">&gt; enter/descend, &lt; ascend. Entrances visually match their theme in the overworld and
     show a recommended level before you commit. Every deepest floor holds a boss whose strength is matched to that
@@ -9840,6 +11682,7 @@ function handleKey(e) {
   if (gameState === 'title') { if (/^[a-z]$/.test(key)) titleScreenChoice(key); return; }
   if (gameState === 'settings') { if (key === 'Escape') { closeSettings(); return; } return; }
   if (gameState === 'confirmdelete') { if (key === 'y' || key === 'n' || key === 'Escape') { confirmDeleteSaveChoice(key); return; } return; }
+  if (gameState === 'halloflegends') { if (key === 'Escape') { showTitleScreen(); return; } return; }
   if (gameState === 'create_archetype') { if (key === '<' || key === '0' || key === '9' || /^[a-z]$/.test(key)) archetypeChoice(key); return; }
   if (gameState === 'create_stats') { if (key === 'Enter' || key === '<' || /^[1-5]$/.test(key)) createStatsKey(key); return; }
   if (gameState === 'create_abilities') { if (key === 'Enter' || key === '<' || key === '[' || key === ']' || /^[1-4]$/.test(key) || /^[a-z]$/.test(key)) createAbilitiesKey(key); return; }
@@ -9853,6 +11696,7 @@ function handleKey(e) {
     if (key === 'Escape') { openSaveLoadMenu(); return; }
     if (MOVE_KEYS[key]) { e.preventDefault(); const [dx,dy] = MOVE_KEYS[key]; movePlayer(dx,dy); return; }
     if (key === '.' || key === '5') { e.preventDefault(); waitTurn(); return; }
+    if (/^[1-4]$/.test(key)) { useQuickslot(parseInt(key,10)-1); return; }
     if (key === '+' || key === '=') { setZoom(-1); return; }
     if (key === '-' || key === '_') { setZoom(1); return; }
     if (key === 'g') { pickUp(); return; }
@@ -9950,8 +11794,14 @@ function handleKey(e) {
     if (key === 'i' && invSelectedSlot === 'hand') { dipWeaponInFire(); gameState='playing'; closeModal(); return; }
     if (key === 'e') { equipItem(invSelected); gameState='playing'; closeModal(); return; }
     if (key === 't' && THROWABLE_EFFECTS.has(invSelected.effect)) { const it = invSelected; closeModal(); beginThrowTargeting(it); return; }
+    if (key === 'q' && !invSelectedSlot) { promptQuickslotAssign(invSelected); return; }
     if (key === 'u') { useItem(invSelected); gameState='playing'; closeModal(); return; }
     if (key === 'd') { dropItem(invSelected); gameState='playing'; closeModal(); return; }
+    return;
+  }
+  if (gameState === 'quickslotassign') {
+    if (key === 'Escape' || key === 'x') { gameState = 'inventory'; renderInventory(); return; }
+    if (/^[1-4]$/.test(key)) { assignQuickslot(parseInt(key,10)-1, invSelected); return; }
     return;
   }
   if (gameState === 'character') {
