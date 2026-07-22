@@ -445,10 +445,25 @@
         <div class="title-menu" id="title-menu"></div>
       </div>
       <div class="title-footer">click or press the bracketed letter &nbsp;&middot;&nbsp; press <b style="color:var(--amber)">?</b> anytime in-game for the full guide</div>
+      <!-- REMINDER: bump this version number every time an updated copy of this file is sent to the player.
+           It's a pre-1.0 alpha build, so increment the minor/patch digit (e.g. v0.6.0 -> v0.7.0) to reflect
+           whatever meaningfully changed that session -- new content/dimensions/bosses -> bump minor,
+           smaller additions/balance/bugfixes -> bump patch. Only drop "-alpha" once the original request
+           is fully complete (see the 100% completion note near the top of the main JS block). -->
+      <div class="title-version" style="position:fixed;bottom:8px;right:12px;font-size:11px;opacity:0.45;letter-spacing:0.5px;pointer-events:none;">v0.7.0-alpha</div>
     </div>
   </div>
 
 <script>
+// ===================== MAINTENANCE NOTE (read this first) =====================
+// This is an ongoing, multi-session project. Whenever an updated copy of this file is sent back
+// to the player, bump the version string in the title screen HTML (search for "title-version" in
+// the surrounding .html file, not in this script). Bump minor for new content (dimensions, bosses,
+// sets, systems), patch for smaller additions/balance passes/bugfixes. It stays "-alpha" until the
+// original request is fully, verifiably complete -- see the completion-tracking note the player
+// asked for: they want to be told explicitly and unprompted the moment that happens, and not
+// before. Don't self-assess 100% lightly; check actual coverage against the original request
+// (full text preserved in project handoff notes from earlier sessions) before ever claiming it.
 // ===================== SOUND MANAGER =====================
 // Everything below is synthesized live with the Web Audio API — there are no
 // external audio files. This keeps the game a single portable HTML file and
@@ -946,7 +961,11 @@ function makeItem(baseId, rarity, rng, powerMult) {
   it.uid = 'i' + Math.random().toString(36).slice(2, 10);
   it.mods = [];
   rarity = rarity || 0;
-  if ((base.type === 'weapon' || base.type === 'armor')) {
+  // Set items and boss uniques carry their own fixed, authored stats -- rolling a random prefix/
+  // suffix on top would both mangle the intended name (e.g. "Voidforged Choir Vestments of the
+  // Bear" instead of just "Choir Vestments") and make their power level unpredictable. This flag
+  // lets makeItem skip the roll for exactly those bases while leaving ordinary loot untouched.
+  if ((base.type === 'weapon' || base.type === 'armor') && !base.noAffixes) {
     if (rng() < 0.30 + rarity * 0.08) it.mods.push(choice(rng, affixPoolForRarity(PREFIXES, rarity)));
     if (rng() < 0.22 + rarity * 0.08) it.mods.push(choice(rng, affixPoolForRarity(SUFFIXES, rarity)));
   }
@@ -2600,6 +2619,146 @@ ITEM_BASES.push(
   { id:'wrench', name:'Heavy Wrench', type:'weapon', slot:'hand', dmg:[2,6], str:6, glyph:')', color:'#9a9a9a', value:16 },
 );
 
+// ============================================================================
+// ITEM SETS & BOSS UNIQUES -- deeper itemization pass. Fixed-stat gear (noAffixes: never rolls a
+// random prefix/suffix on top) sourced from a controlled, dedicated mechanism rather than the
+// generic random loot pool -- see the setId/isUnique exclusions added to every loot-pool filter
+// above, and the drop wiring right after ITEM_SETS below. Four sets, one per new dimension's
+// faction, each 5 pieces with cumulative 2pc/4pc bonuses; six boss-specific unique weapons/
+// accessories, one chance-based drop per listed boss regardless of how that boss was spawned.
+// ============================================================================
+const ITEM_SETS = {
+  riftwarden: {
+    name: "the Rift-Warden's Bane", faction: 'demonic',
+    pieces: ['rw_helm', 'rw_plate', 'rw_gauntlets', 'rw_greaves', 'rw_signet'],
+    bonuses: {
+      2: { desc: '+12% critical damage', critDmgBonus: 0.12 },
+      4: { desc: '+8% critical chance, +8% lifesteal', critBonus: 0.08, lifestealBonus: 0.08 },
+    },
+  },
+  choirvestments: {
+    name: 'the Choir Vestments', faction: 'celestial',
+    pieces: ['cv_circlet', 'cv_vestments', 'cv_handwraps', 'cv_sandals', 'cv_halo'],
+    bonuses: {
+      2: { desc: '+15% spell damage', spellDmgBonus: 0.15 },
+      4: { desc: '+10% lifesteal, +3 INT, +3 CON', lifestealBonus: 0.10, int: 3, con: 3 },
+    },
+  },
+  signallattice: {
+    name: 'the Signal Lattice', faction: 'cosmic',
+    pieces: ['sl_visor', 'sl_plating', 'sl_gauntlets', 'sl_boots', 'sl_cloak'],
+    bonuses: {
+      2: { desc: '+15% technique damage', techniqueDmgBonus: 0.15 },
+      4: { desc: '+10% dodge chance, +3 DEX, +3 INT', dodgeChance: 0.10, dex: 3, int: 3 },
+    },
+  },
+  recursionward: {
+    name: 'the Recursion Ward', faction: 'nonEuclid',
+    pieces: ['rc_mask', 'rc_robes', 'rc_gloves', 'rc_boots', 'rc_band'],
+    bonuses: {
+      2: { desc: '+10% critical chance', critBonus: 0.10 },
+      4: { desc: '+25% critical damage, +3 to all attributes', critDmgBonus: 0.25, str: 3, dex: 3, int: 3, con: 3 },
+    },
+  },
+};
+ITEM_BASES.push(
+  // ---- the Rift-Warden's Bane (demonic / Abyssal Wastes & Demon Gate) ----
+  { id:'rw_helm', name:"Rift-Warden's Horned Crest", type:'armor', slot:'head', armor:6, str:8, strBonus:2, fireDmg:2, glyph:'^', color:'#c93a3a', value:280, setId:'riftwarden', noAffixes:true, valueTier:4 },
+  { id:'rw_plate', name:"Rift-Warden's Brimstone Plate", type:'armor', slot:'body', armor:15, str:20, strBonus:4, conBonus:2, glyph:'[', color:'#c93a3a', value:420, setId:'riftwarden', noAffixes:true, valueTier:4 },
+  { id:'rw_gauntlets', name:"Rift-Warden's Scorched Gauntlets", type:'armor', slot:'gloves', armor:4, str:5, strBonus:2, fireDmg:2, glyph:'[', color:'#c93a3a', value:260, setId:'riftwarden', noAffixes:true, valueTier:4 },
+  { id:'rw_greaves', name:"Rift-Warden's Ashen Greaves", type:'armor', slot:'feet', armor:6, str:8, dexBonus:3, glyph:'[', color:'#c93a3a', value:270, setId:'riftwarden', noAffixes:true, valueTier:4 },
+  { id:'rw_signet', name:"Rift-Warden's Ember Signet", type:'armor', slot:'ring', armor:0, strBonus:2, fireDmg:3, glyph:'=', color:'#c93a3a', value:250, setId:'riftwarden', noAffixes:true, valueTier:4 },
+  // ---- the Choir Vestments (celestial / Gilded Choir & Sky Bastion) ----
+  { id:'cv_circlet', name:'Choir Circlet', type:'armor', slot:'head', armor:4, str:5, intBonus:3, glyph:'^', color:'#f0e0a0', value:280, setId:'choirvestments', noAffixes:true, valueTier:4 },
+  { id:'cv_vestments', name:'Choir Vestments', type:'armor', slot:'body', armor:6, str:8, intBonus:4, glyph:'[', color:'#f0e0a0', value:300, setId:'choirvestments', noAffixes:true, valueTier:4 },
+  { id:'cv_handwraps', name:'Choir Handwraps', type:'armor', slot:'gloves', armor:2, str:3, intBonus:2, glyph:'[', color:'#f0e0a0', value:240, setId:'choirvestments', noAffixes:true, valueTier:4 },
+  { id:'cv_sandals', name:'Choir Sandals', type:'armor', slot:'feet', armor:3, str:4, dexBonus:2, intBonus:1, glyph:'[', color:'#f0e0a0', value:250, setId:'choirvestments', noAffixes:true, valueTier:4 },
+  { id:'cv_halo', name:'Choir Halo Pendant', type:'armor', slot:'amulet', armor:1, intBonus:3, conBonus:1, glyph:'=', color:'#f0e0a0', value:260, setId:'choirvestments', noAffixes:true, valueTier:4 },
+  // ---- the Signal Lattice (cosmic / the Drift & Derelict Hulk) ----
+  { id:'sl_visor', name:'Signal Lattice Visor', type:'armor', slot:'head', armor:5, str:7, dexBonus:2, intBonus:1, glyph:'^', color:'#4ae0d0', value:280, setId:'signallattice', noAffixes:true, valueTier:4 },
+  { id:'sl_plating', name:'Signal Lattice Plating', type:'armor', slot:'body', armor:13, str:18, dexBonus:2, conBonus:2, glyph:'[', color:'#4ae0d0', value:400, setId:'signallattice', noAffixes:true, valueTier:4 },
+  { id:'sl_gauntlets', name:'Signal Lattice Gauntlets', type:'armor', slot:'gloves', armor:3, str:4, dexBonus:2, glyph:'[', color:'#4ae0d0', value:250, setId:'signallattice', noAffixes:true, valueTier:4 },
+  { id:'sl_boots', name:'Signal Lattice Boots', type:'armor', slot:'feet', armor:5, str:7, dexBonus:3, glyph:'[', color:'#4ae0d0', value:270, setId:'signallattice', noAffixes:true, valueTier:4 },
+  { id:'sl_cloak', name:'Signal Lattice Phase Cloak', type:'armor', slot:'cloak', armor:2, dexBonus:2, intBonus:1, glyph:'(', color:'#4ae0d0', value:260, setId:'signallattice', noAffixes:true, valueTier:4 },
+  // ---- the Recursion Ward (nonEuclid / the Fourth Corridor & Folded Vault) ----
+  { id:'rc_mask', name:'Recursion Mask', type:'armor', slot:'head', armor:5, str:7, intBonus:2, dexBonus:1, glyph:'^', color:'#b090ff', value:280, setId:'recursionward', noAffixes:true, valueTier:4 },
+  { id:'rc_robes', name:'Recursion Robes', type:'armor', slot:'body', armor:9, str:12, intBonus:3, conBonus:1, glyph:'[', color:'#b090ff', value:350, setId:'recursionward', noAffixes:true, valueTier:4 },
+  { id:'rc_gloves', name:'Recursion Gloves', type:'armor', slot:'gloves', armor:3, str:4, dexBonus:2, glyph:'[', color:'#b090ff', value:250, setId:'recursionward', noAffixes:true, valueTier:4 },
+  { id:'rc_boots', name:'Recursion Boots', type:'armor', slot:'feet', armor:5, str:7, dexBonus:2, intBonus:1, glyph:'[', color:'#b090ff', value:270, setId:'recursionward', noAffixes:true, valueTier:4 },
+  { id:'rc_band', name:'Recursion Band', type:'armor', slot:'ring', armor:0, intBonus:2, dexBonus:2, glyph:'=', color:'#b090ff', value:260, setId:'recursionward', noAffixes:true, valueTier:4 },
+  // ---- boss-specific unique weapons/accessories ----
+  { id:'rw_maw', name:"the Rift-Warden's Maw", type:'weapon', slot:'hand', dmg:[9,19], str:20, fireDmg:5, glyph:')', color:'#c93a3a', value:520, isUnique:true, uniqueBoss:'archdemon_malphegor', noAffixes:true, valueTier:4,
+    desc:"Malphegor's own warhammer, still hot from the Wastes. It never stops smelling faintly of brimstone." },
+  { id:'choirsong', name:'Choirsong', type:'weapon', slot:'hand', dmg:[6,14], str:10, lifesteal:0.08, glyph:'/', color:'#f0e0a0', value:500, isUnique:true, uniqueBoss:'seraphiel', noAffixes:true, valueTier:4,
+    desc:"Seraphiel's judgment-staff. It hums a note just below hearing that seems to know exactly how much of you it's taking." },
+  { id:'fractured_beam', name:'Fractured Beam Emitter', type:'weapon', slot:'hand', dmg:[8,17], str:12, frostDmg:4, glyph:')', color:'#4ae0d0', value:510, isUnique:true, uniqueBoss:'hollow_signal', noAffixes:true, valueTier:4,
+    desc:'Salvaged from the Hollow Signal itself. The beam it fires arrives slightly before you pull the trigger.' },
+  { id:'wrong_number', name:'the Wrong Number', type:'weapon', slot:'hand', dmg:[7,15], str:8, poisonDmg:4, lifesteal:0.06, glyph:')', color:'#b090ff', value:490, isUnique:true, uniqueBoss:'uncounted_angle', noAffixes:true, valueTier:4,
+    desc:"A blade with one more edge than it should have. Counting them changes the answer every time." },
+  { id:'hollow_scepter', name:"the Hollow King's Scepter", type:'weapon', slot:'hand', dmg:[7,15], str:9, poisonDmg:5, glyph:'/', color:'#5ad48a', value:480, isUnique:true, uniqueBoss:'hollow_king', noAffixes:true, valueTier:4,
+    desc:"Ashgrave's own scepter of office, kept long after there was a court left to hold it in front of." },
+  { id:'unblinking_eye_amulet', name:'the Unblinking Eye', type:'armor', slot:'amulet', armor:1, intBonus:5, glyph:'=', color:'#8a2ad4', value:460, isUnique:true, uniqueBoss:'unblinking_eye', noAffixes:true, valueTier:4,
+    desc:"It does not close when you sleep. You stop minding, eventually, which is its own kind of warning." },
+);
+// Chance-based unique drop per boss, independent of how/where that boss was spawned (main-quest
+// forced encounter, wandering overworld boss, etc.) -- resolved centrally in dropLoot() rather
+// than at each individual spawn site, unlike the guaranteed dimension-key drops (Ignition Core
+// etc.) which only ever have one spawn path each.
+const BOSS_UNIQUE_DROPS = {
+  archdemon_malphegor: { itemId: 'rw_maw', chance: 0.35 },
+  seraphiel: { itemId: 'choirsong', chance: 0.35 },
+  hollow_signal: { itemId: 'fractured_beam', chance: 0.35 },
+  uncounted_angle: { itemId: 'wrong_number', chance: 0.35 },
+  hollow_king: { itemId: 'hollow_scepter', chance: 0.30 },
+  unblinking_eye: { itemId: 'unblinking_eye_amulet', chance: 0.30 },
+};
+// Chance for a boss/miniboss of a given faction to drop a random piece of that faction's set.
+// Rolled separately from (and in addition to) that boss's own unique-weapon roll above.
+const SET_DROP_FACTIONS = { demonic: 'riftwarden', celestial: 'choirvestments', cosmic: 'signallattice', nonEuclid: 'recursionward' };
+
+// ---- set bonus application: recomputed from scratch on every equipment change so partial/
+// stacking bugs can't creep in. Every bonus field used below (critBonus, critDmgBonus,
+// lifestealBonus, spellDmgBonus, techniqueDmgBonus, dodgeChance, and direct str/dex/int/con) is an
+// existing, already-combat-tested player accumulator shared with talents/cybernetics/mutations --
+// deliberately not introducing any new combat-code hooks for this. ----
+function equippedSetPieceCounts() {
+  const counts = {};
+  for (const slot in player.equipment) {
+    const it = player.equipment[slot];
+    if (it && it.setId) counts[it.setId] = (counts[it.setId] || 0) + 1;
+  }
+  return counts;
+}
+function applySetBonusTier(setId, tier, sign) {
+  const b = ITEM_SETS[setId].bonuses[tier];
+  if (!b) return;
+  for (const key in b) {
+    if (key === 'desc') continue;
+    const delta = sign * b[key];
+    if (key === 'int') {
+      player.int += delta; const mpAdd = delta * 2; player.maxMp = Math.max(1, player.maxMp + mpAdd); if (mpAdd > 0) player.mp += mpAdd; else player.mp = Math.min(player.mp, player.maxMp);
+    } else if (key === 'con') {
+      player.con += delta; const hpAdd = delta * 3; player.maxHp = Math.max(1, player.maxHp + hpAdd); if (hpAdd > 0) player.hp += hpAdd; else player.hp = Math.min(player.hp, player.maxHp);
+    } else if (key === 'str' || key === 'dex') {
+      player[key] += delta;
+    } else {
+      player[key] = (player[key] || 0) + delta;
+    }
+  }
+}
+function recomputeSetBonuses() {
+  player.activeSetTiers = player.activeSetTiers || {};
+  const counts = equippedSetPieceCounts();
+  for (const setId in ITEM_SETS) {
+    const have = counts[setId] || 0;
+    const currentlyActive = player.activeSetTiers[setId] || [];
+    const shouldBeActive = Object.keys(ITEM_SETS[setId].bonuses).map(Number).filter(t => have >= t);
+    for (const t of currentlyActive) if (!shouldBeActive.includes(t)) applySetBonusTier(setId, t, -1);
+    for (const t of shouldBeActive) if (!currentlyActive.includes(t)) applySetBonusTier(setId, t, 1);
+    player.activeSetTiers[setId] = shouldBeActive;
+  }
+}
+
 // ---- new spells across schools (school field added to ALL spells for organization) ----
 const SPELL_SCHOOL_MAP = {
   magicmissile:'Arcane', firebolt:'Arcane', frostbolt:'Arcane', lightning:'Arcane', soulbolt:'Arcane',
@@ -2794,6 +2953,7 @@ Object.assign(DUNGEON_THEMES, {
   sky_bastion:      { name:'Sky Bastion', tier:'rare', genre:'rooms', depthRange:[7,11], dtierMax:4 },
   derelict_hulk:    { name:'Derelict Hulk', tier:'rare', genre:'rooms', depthRange:[7,11], dtierMax:4 },
   folded_vault:     { name:'Folded Vault', tier:'rare', genre:'rooms', depthRange:[7,11], dtierMax:4 },
+  flooded_crypt:    { name:'Flooded Crypt', tier:'rare', genre:'rooms', depthRange:[7,11], dtierMax:4 },
   gods_threshold:   { name:"The Threshold", tier:'rare', genre:'rooms', depthRange:[10,12], dtierMax:5 },
   forgotten_library:{ name:'Forgotten Library', tier:'rare', genre:'rooms', depthRange:[6,9], dtierMax:3 },
   cyber_vault:      { name:'Cyber Vault', tier:'rare', genre:'rooms', depthRange:[6,10], dtierMax:3, lootBias:'cyber' },
@@ -3309,6 +3469,17 @@ MONSTER_BASES.recursive_husk = { name:'Recursive Husk', glyph:'H', color:'#8a70d
 MONSTER_BASES.still_walker = { name:'Still Walker', glyph:'s', color:'#c0b0ff', hp:30, str:10, dex:19, atk:[3,7], armor:1, xp:24, behavior:'ranged', dtier:2, faction:'nonEuclid', causesConfuse:true };
 MONSTER_BASES.folded_sentinel = { name:'Folded Sentinel', glyph:'S', color:'#a080e0', hp:98, str:23, dex:11, atk:[9,17], armor:10, xp:64, behavior:'aggressive', dtier:4, faction:'nonEuclid', miniboss:true };
 
+// ---- drowned faction: The Undertow dimension #6 and its Flooded Crypt gate dungeon. Reuses
+// three already-established aquatic monsters (giant_eel, drowned_sailor, siren) directly in its
+// biome encounter tables alongside these new ones, rather than inventing a fully separate roster
+// from scratch -- per the reminder that reuse is fine as long as the dimension still has enough
+// of its own unique identity. kraken_spawn/abyssal_leviathan are deliberately left alone as their
+// own existing dungeon-exclusive finds. ----
+MONSTER_BASES.drift_wraith = { name:'Drift Wraith', glyph:'w', color:'#3a6a8a', hp:36, str:11, dex:15, atk:[3,8], armor:1, xp:26, behavior:'ambush', ambushRange:2, dtier:2, faction:'drowned', aquatic:true };
+MONSTER_BASES.current_stalker = { name:'Current Stalker', glyph:'c', color:'#1a4a6a', hp:50, str:15, dex:16, atk:[5,11], armor:2, xp:38, behavior:'aggressive', dtier:3, faction:'drowned', aquatic:true };
+MONSTER_BASES.tideglass_horror = { name:'Tideglass Horror', glyph:'H', color:'#5a9ac0', hp:60, str:16, dex:9, atk:[6,12], armor:4, xp:46, behavior:'aggressive', dtier:3, faction:'drowned', aquatic:true, causesFear:true };
+MONSTER_BASES.brinelord = { name:'Brinelord', glyph:'B', color:'#0a5a7a', hp:96, str:22, dex:10, atk:[9,17], armor:9, xp:63, behavior:'aggressive', dtier:4, faction:'drowned', aquatic:true, miniboss:true };
+
 // ---- Malphegor, the Rift-Warden — Arch Demon gatekeeper of the Abyssal Wastes ----
 // A sixth, fully bespoke story boss, distinct from the Batch 1 five: fire/summoning-themed,
 // and the one guaranteed, non-procedural encounter guarding entry to Phase 3's dimension.
@@ -3574,6 +3745,74 @@ STORY_BOSS_AI.uncounted_angle = function (m, dist, seesPlayer) {
     const dmg = bossScaledDirectDamage(m, 1.5);
     player.hp -= dmg;
     if (settings.showDamageNumbers) spawnFloatingText(player.x, player.y, '-' + dmg, '#d8c0ff');
+    return true;
+  }
+  if (dist > 1) { stepToward(m, player.x, player.y); return true; }
+  bossMeleeHit(m, 1);
+  return true;
+};
+
+// ---- The Fathom Mother — drowned gatekeeper of the Flooded Crypt ----
+// A tenth bespoke gate boss. Back to the direct boss-kill-opens-the-rift pattern (like Malphegor/
+// Seraphiel) rather than another item-gated mechanic -- not every dimension needs a novel unlock,
+// and this one earns its place on tone/roster instead.
+MONSTER_BASES.fathom_mother = {
+  name: 'The Fathom Mother', desc: 'Barnacled and vast, more coastline than creature, with a hundred small drowned faces pressed into her hide like they were never given the choice to leave.',
+  glyph: 'M', color: '#0a5a7a', hp: 310, str: 25, dex: 13, atk: [11, 21], armor: 10, xp: 490,
+  behavior: 'aggressive', boss: true, bossTier: 'rare', dtier: 5, faction: 'drowned', aquatic: true,
+  scriptedAI: 'fathom_mother',
+  engageLine: "Everyone who comes down here says they'll be the one who leaves. Come here. Let's see.",
+  deathLine: "...Go on, then. Tell the ones up there what's down here. They never believe it twice.",
+  lore: "Nobody remembers what the crypt was built to hold before she moved in, only that she has been down here longer than any record of the surface world above her, patiently adding one more face to her collection every time someone comes looking for whatever this place used to be.",
+};
+BOSS_POWER.fathom_mother = 6;
+MONSTER_BASES.fathom_mother.bossPower = 6;
+STORY_BOSS_AI.fathom_mother = function (m, dist, seesPlayer) {
+  bossTickCds(m);
+  const p = announceBossPhase(m, {
+    2: "You're not the first to bleed on my floor. You won't be the last, either.",
+    3: "Enough. Come here.",
+  });
+  if (!seesPlayer && !m.engaged) { wander(m); return true; }
+  if (dist <= 3 && bossReady(m, 'undertow')) {
+    bossCool(m, 'undertow', 4);
+    log(`${m.name} drags you with a crushing Undertow!`);
+    const dmg = bossScaledDirectDamage(m, 0.9);
+    player.hp -= dmg;
+    if (settings.showDamageNumbers) spawnFloatingText(player.x, player.y, '-' + dmg, '#0a5a7a');
+    return true;
+  }
+  if (bossReady(m, 'drown') && Math.random() < 0.25) {
+    bossCool(m, 'drown', 6);
+    player.statusSlow = Math.max(player.statusSlow || 0, 3);
+    log(`${m.name} floods the room -- the water drags at your every step!`);
+    return true;
+  }
+  if (p >= 2 && !m.usedCall && bossReady(m, 'summon')) {
+    m.usedCall = true;
+    bossCool(m, 'summon', 10);
+    log(`${m.name} calls down into the dark.`);
+    bossSummon(m, 'drift_wraith', 3);
+    return true;
+  }
+  if (dist >= 2 && dist <= 6 && bossReady(m, 'volley')) {
+    bossCool(m, 'volley', 3);
+    bossRangedHit(m, 0.75); bossRangedHit(m, 0.75);
+    return true;
+  }
+  if (bossReady(m, 'shriek') && Math.random() < 0.3) {
+    bossCool(m, 'shriek', 6);
+    player.statusFear = Math.max(player.statusFear || 0, 3);
+    log(`${m.name} lets out a drowning shriek!`);
+    return true;
+  }
+  if (p === 3 && !m.usedDeep && bossReady(m, 'deep')) {
+    m.usedDeep = true;
+    bossCool(m, 'deep', 99);
+    log(`${m.name}: "Down. Down with the rest of them."`);
+    const dmg = bossScaledDirectDamage(m, 1.5);
+    player.hp -= dmg;
+    if (settings.showDamageNumbers) spawnFloatingText(player.x, player.y, '-' + dmg, '#3a9ac0');
     return true;
   }
   if (dist > 1) { stepToward(m, player.x, player.y); return true; }
@@ -4006,6 +4245,7 @@ const DUNGEON_THEME_FACTIONS = {
   sky_bastion: ['celestial'],
   derelict_hulk: ['cosmic'],
   folded_vault: ['nonEuclid'],
+  flooded_crypt: ['drowned', 'aquatic'],
   gods_threshold: ['antagonist'],
   forgotten_library: ['construct','undead','human'],
   cyber_vault: ['cyber','construct'],
@@ -4039,6 +4279,8 @@ Object.assign(DUNGEON_THEMES, {
   silent_bridge: { name:'The Silent Bridge', tier:'dimension', genre:'rooms', depthRange:[6,6], dtierMax:5, factions:['cosmic'] },
   // same tier:'dimension' reasoning as above -- only ever placed inside the Fourth Corridor.
   echo_gallery: { name:'The Echo Gallery', tier:'dimension', genre:'rooms', depthRange:[6,6], dtierMax:5, factions:['nonEuclid'] },
+  // same tier:'dimension' reasoning as above -- only ever placed inside The Undertow.
+  drowned_choir: { name:'The Drowned Choir', tier:'dimension', genre:'rooms', depthRange:[6,6], dtierMax:5, factions:['drowned','aquatic'] },
 });
 
 // ===================== MONSTER EXPANSION PACK: ~76 new enemies, every faction/theme, varied AI =====================
@@ -4402,12 +4644,12 @@ function makeNPC(roleId, x, y, rng, settlementName) {
 function generateShopInventory(roleId, rng) {
   const items = [];
   let pool;
-  if (roleId === 'blacksmith') pool = ITEM_BASES.filter(b => b.type === 'weapon' || b.type === 'armor');
+  if (roleId === 'blacksmith') pool = ITEM_BASES.filter(b => (b.type === 'weapon' || b.type === 'armor') && !b.setId && !b.isUnique);
   else if (roleId === 'innkeeper' || roleId === 'baker' || roleId === 'chef') pool = ITEM_BASES.filter(b => b.type === 'consumable' && b.id !== 'antidote');
   else if (roleId === 'alchemist') pool = ITEM_BASES.filter(b => b.type === 'consumable');
   else if (roleId === 'tailor') pool = ITEM_BASES.filter(b => b.type === 'armor' && ['cloak','gloves','amulet','circlet','sandals','robe'].includes(b.id));
   else if (roleId === 'fisherman') pool = ITEM_BASES.filter(b => ['meat_cooked','stew','holy_water'].includes(b.id));
-  else pool = ITEM_BASES.filter(b => b.type !== 'misc' && b.type !== 'material' && b.type !== 'chest' && b.type !== 'corpse');
+  else pool = ITEM_BASES.filter(b => b.type !== 'misc' && b.type !== 'material' && b.type !== 'chest' && b.type !== 'corpse' && !b.setId && !b.isUnique);
   const n = randInt(rng, 5, 9);
   for (let i = 0; i < n; i++) {
     const base = choice(rng, pool);
@@ -4801,6 +5043,7 @@ function placePOI(chunk, cx, cy, rng) {
   if (poiType.lootItems) {
     const baseIds = ITEM_BASES.filter(b => {
       if (b.type === 'misc' || b.type === 'chest' || b.type === 'corpse') return false;
+      if (b.setId || b.isUnique) return false;
       if ((b.type === 'weapon' || b.type === 'armor') && (b.valueTier || 0) > 2) return false;
       return true;
     }).map(b => b.id);
@@ -5416,6 +5659,7 @@ function equipItem(it) {
   if (cur) { removeStatBonuses(cur); player.inventory.push(cur); }
   player.equipment[slot] = it;
   applyStatBonuses(it);
+  recomputeSetBonuses();
   player.inventory = player.inventory.filter(i => i.uid !== it.uid);
   Sound.play('equip');
   if (it.str && effStr(player) < it.str) {
@@ -5431,6 +5675,7 @@ function unequipSlot(slot) {
   if (!it) return;
   removeStatBonuses(it);
   player.equipment[slot] = null;
+  recomputeSetBonuses();
   player.inventory.push(it);
   Sound.play('unequip');
   log(`You unequip ${it.name}.`);
@@ -6584,6 +6829,7 @@ function levelUp() {
   // felt impact, and helps keep pace with how much tougher high-tier content becomes.
   if (player.level % 10 === 0) { player.statPoints += 3; msg += ' (Milestone: +3 bonus stat points!)'; }
   if (player.level >= LEVEL_CAP) msg = `*** You reached the maximum level, ${LEVEL_CAP}! You are as strong as this world can make you. ***`;
+  (player.companions || []).filter(c => c.alive).forEach(scaleCompanionToPlayer);
   Sound.play('levelUp');
   log(msg);
 }
@@ -7426,6 +7672,7 @@ function openChest(chestItem) {
   const maxValueTier = Math.min(4, tier + 1);
   const baseIds = ITEM_BASES.filter(b => {
     if (b.type === 'misc' || b.type === 'chest' || b.type === 'corpse' || b.type === 'material') return false;
+    if (b.setId || b.isUnique) return false;
     if ((b.type === 'weapon' || b.type === 'armor') && (b.valueTier || 0) > maxValueTier) return false;
     return true;
   }).map(b => b.id);
@@ -7465,6 +7712,7 @@ function lootBaseIdsFor(def) {
   const maxValueTier = Math.min(4, monsterPowerTier(def) + 1);
   return ITEM_BASES.filter(b => {
     if (b.type === 'misc' || b.type === 'chest' || b.type === 'corpse' || b.type === 'material') return false;
+    if (b.setId || b.isUnique) return false;
     if ((b.type === 'weapon' || b.type === 'armor') && (b.valueTier || 0) > maxValueTier) return false;
     return true;
   }).map(b => b.id);
@@ -7474,6 +7722,29 @@ function dropLoot(def) {
   const items = [];
   const goldMult = 1 + (player.goldBonus || 0);
   if (def.guaranteedDrops && def.guaranteedDrops.length) items.push(...def.guaranteedDrops);
+  // Boss-specific unique weapon/accessory (a chance roll, independent of any guaranteedDrops the
+  // boss might also carry -- e.g. Hollow Signal can drop both its Ignition Core key item AND,
+  // separately, a chance at the Fractured Beam Emitter). Resolved centrally here so it works no
+  // matter which of a boss's possible spawn paths (dungeon gate, main-quest encounter, wandering
+  // world boss) actually produced this instance.
+  if (def.boss && BOSS_UNIQUE_DROPS[def.monsterId] && Math.random() < BOSS_UNIQUE_DROPS[def.monsterId].chance) {
+    items.push(makeItem(BOSS_UNIQUE_DROPS[def.monsterId].itemId, 0, Math.random));
+  }
+  // Faction set-piece drop: any boss or miniboss belonging to one of the four faction-set
+  // dimensions has a modest chance to drop a random piece of that faction's set, separate from
+  // (and in addition to) its own named unique above where applicable.
+  {
+    const mbase = MONSTER_BASES[def.monsterId];
+    const faction = mbase && mbase.faction;
+    const setId = faction && SET_DROP_FACTIONS[faction];
+    if (setId && (def.boss || mbase.miniboss)) {
+      const chance = def.boss ? 0.30 : 0.15;
+      if (Math.random() < chance) {
+        const pieceId = choice(Math.random, ITEM_SETS[setId].pieces);
+        items.push(makeItem(pieceId, 0, Math.random));
+      }
+    }
+  }
   if (def.kind === 'monster' || def.kind === 'ally') {
     const base = MONSTER_BASES[def.monsterId];
     const pTier = monsterPowerTier(def);
@@ -7531,6 +7802,7 @@ function onDeath(def, killer) {
   if (def.deathLine) log(`${def.name}: "${def.deathLine}"`);
   if (def.monsterId === 'archdemon_malphegor') unlockAbyssalWastes(def);
   if (def.monsterId === 'seraphiel') unlockGildedChoir(def);
+  if (def.monsterId === 'fathom_mother') unlockTheUndertow(def);
   if (def.monsterId === 'the_antagonist') triggerGodReveal(def);
   if (def.monsterId === 'god') triggerSimulationReveal(def);
   if (isPlayerOwnedKiller(killer) || def.harmedByPlayer) {
@@ -7610,6 +7882,26 @@ function relocateAllies() {
     }
   }
 }
+// Fixes the long-documented gap where companions (recruited spouses) kept whatever flat civilian
+// stats they spawned with (a Farmer's 12 HP, forever) no matter how strong the player got, unlike
+// summoned allies which already scale with player level. Reuses the exact same proven curve
+// (MONSTER_SCALE_BASE + depthScaleForPlayerLevel) rather than inventing new scaling math --
+// recomputed from a captured pristine base each time, never compounded, so it can't repeat the
+// runaway-HP bug that hit monster reinforcements earlier.
+function scaleCompanionToPlayer(npc) {
+  if (npc.baseHp === undefined) {
+    npc.baseHp = npc.maxHp; npc.baseStr = npc.str; npc.baseDex = npc.dex;
+    npc.baseArmor = npc.armor; npc.baseAtk = npc.atk.slice();
+  }
+  const scale = Math.pow(MONSTER_SCALE_BASE, depthScaleForPlayerLevel(player.level) - 1);
+  const hpRatio = npc.maxHp > 0 ? npc.hp / npc.maxHp : 1; // preserve current damage %, don't full-heal on every level-up
+  npc.maxHp = Math.max(1, Math.round(npc.baseHp * scale));
+  npc.hp = Math.max(1, Math.round(npc.maxHp * hpRatio));
+  npc.str = Math.max(1, Math.round(npc.baseStr * scale));
+  npc.dex = Math.max(1, Math.round(npc.baseDex * Math.sqrt(scale))); // milder curve so accuracy/evasion don't get silly
+  npc.armor = Math.max(0, Math.round(npc.baseArmor * scale));
+  npc.atk = [Math.max(1, Math.round(npc.baseAtk[0] * scale)), Math.max(1, Math.round(npc.baseAtk[1] * scale))];
+}
 function toggleSpouseFollow(npc) {
   if (npc.following) {
     npc.following = false;
@@ -7625,6 +7917,7 @@ function toggleSpouseFollow(npc) {
     c.npcs = c.npcs.filter(n => n !== npc);
     npc.following = true;
     npc.x = player.x; npc.y = player.y;
+    scaleCompanionToPlayer(npc);
     player.companions.push(npc);
     log(`${npc.name} joins you on your travels!`);
     relocateAllies();
@@ -9115,6 +9408,7 @@ function generateChunk(cx, cy) {
         // this is what previously let a "Corrupted Plate of Eternity" turn up sitting in a field.
         const baseIds = ITEM_BASES.filter(b => {
           if (b.type === 'misc' || b.type === 'chest' || b.type === 'corpse') return false;
+          if (b.setId || b.isUnique) return false;
           if ((b.type === 'weapon' || b.type === 'armor') && (b.valueTier || 0) > 1) return false;
           return true;
         }).map(b => b.id);
@@ -9150,9 +9444,9 @@ function dimChunkKey(dimId, cx, cy) { return dimId + '|' + cx + ',' + cy; }
 const DIMENSION_SUBDUNGEONS = [];
 
 const ABYSSAL_BIOMES = {
-  ashfields:        { name:'Ashfields',        walkable:true,  glyph:'.', color:'#a8785a', bg:'#2a1810', encounter:[['imp',5],['hellhound',4],['tormented_soul',3]] },
-  brimstone_chasm:  { name:'Brimstone Chasm',   walkable:true,  glyph:'.', color:'#d4600a', bg:'#3a1000', encounter:[['hellhound',5],['brimstone_stalker',4],['imp',3]] },
-  bone_forest:      { name:'Bone Forest',       walkable:true,  glyph:'"', color:'#c9c0a8', bg:'#1a1410', encounter:[['tormented_soul',5],['bone_horror',3],['imp',2]] },
+  ashfields:        { name:'Ashfields',        walkable:true,  glyph:'.', color:'#a8785a', bg:'#2a1810', encounter:[['imp',5],['hellhound',4],['tormented_soul',3],['shadow_demon',2]] },
+  brimstone_chasm:  { name:'Brimstone Chasm',   walkable:true,  glyph:'.', color:'#d4600a', bg:'#3a1000', encounter:[['hellhound',5],['brimstone_stalker',4],['imp',3],['succubus',2],['pit_fiend',1]] },
+  bone_forest:      { name:'Bone Forest',       walkable:true,  glyph:'"', color:'#c9c0a8', bg:'#1a1410', encounter:[['tormented_soul',5],['bone_horror',3],['imp',2],['shadow_demon',2]] },
   obsidian_spires:  { name:'Obsidian Spires',   walkable:false, glyph:'^', color:'#1a1420', bg:'#0a0812', encounter:[] },
   molten_lava:      { name:'Molten Lava',       walkable:false, glyph:'~', color:'#e8600a', bg:'#2a0800', encounter:[] },
 };
@@ -9169,9 +9463,9 @@ function classifyAbyssalBiome(elev, heat) {
 // Sanctum" dungeon (no hostile final boss) and rest at the altar inside it. Different mechanic
 // on purpose, matching the original brief's call for varied ways into each dimension. ----
 const DREAM_BIOMES = {
-  floating_gardens: { name:'Floating Gardens', walkable:true,  glyph:'"', color:'#9adc6a', bg:'#182a1a', encounter:[['figment',5],['echo_child',3]] },
-  the_unraveling:   { name:'The Unraveling',   walkable:true,  glyph:'%', color:'#d060e0', bg:'#1a0a2a', encounter:[['unraveled_thing',5],['night_terror',4],['figment',2]] },
-  childhood_echo:   { name:'Childhood Echo',   walkable:true,  glyph:'.', color:'#c9c9e0', bg:'#161628', encounter:[['echo_child',5],['figment',3]] },
+  floating_gardens: { name:'Floating Gardens', walkable:true,  glyph:'"', color:'#9adc6a', bg:'#182a1a', encounter:[['figment',5],['echo_child',3],['lucid_wisp',3]] },
+  the_unraveling:   { name:'The Unraveling',   walkable:true,  glyph:'%', color:'#d060e0', bg:'#1a0a2a', encounter:[['unraveled_thing',5],['night_terror',4],['mirror_self',2],['figment',2]] },
+  childhood_echo:   { name:'Childhood Echo',   walkable:true,  glyph:'.', color:'#c9c9e0', bg:'#161628', encounter:[['echo_child',5],['figment',3],['lucid_wisp',2]] },
   mirror_lake:      { name:'Mirror Lake',      walkable:false, glyph:'~', color:'#6ab0e0', bg:'#0a1828', encounter:[] },
   the_void_between: { name:'The Void Between', walkable:false, glyph:' ', color:'#0a0a14', bg:'#000005', encounter:[] },
 };
@@ -9186,6 +9480,9 @@ MONSTER_BASES.figment = { name:'Figment', glyph:'f', color:'#c9c9e0', hp:14, str
 MONSTER_BASES.echo_child = { name:'Echo of a Child', glyph:'e', color:'#e0e0f0', hp:24, str:9, dex:11, atk:[2,6], armor:0, xp:19, behavior:'ranged', dtier:2, faction:'dream', causesFear:true };
 MONSTER_BASES.night_terror = { name:'Night Terror', glyph:'n', color:'#5a1a7a', hp:40, str:15, dex:13, atk:[4,10], armor:2, xp:34, behavior:'ambush', ambushRange:2, dtier:3, faction:'dream' };
 MONSTER_BASES.unraveled_thing = { name:'Unraveled Thing', glyph:'u', color:'#d060e0', hp:52, str:16, dex:10, atk:[5,11], armor:1, xp:42, behavior:'aggressive', dtier:3, faction:'dream' };
+MONSTER_BASES.lucid_wisp = { name:'Lucid Wisp', glyph:'*', color:'#a0e0ff', hp:18, str:7, dex:16, atk:[1,5], armor:0, xp:14, behavior:'ranged', dtier:1, faction:'dream' };
+MONSTER_BASES.mirror_self = { name:'Mirror Self', glyph:'@', color:'#8a7ac0', hp:46, str:13, dex:13, atk:[4,9], armor:1, xp:38, behavior:'aggressive', dtier:3, faction:'dream', causesFear:true,
+  desc:"Wears your own face, a half-second behind every expression you make." };
 
 // ---- The Gilded Choir: dimension #3. Entered by force like the Abyssal Wastes -- climb the Sky
 // Bastion, defeat its gatekeeper Seraphiel -- but the tone is inverted: bright, orderly, and
@@ -9243,6 +9540,24 @@ function classifyFourthBiome(elev, heat) {
   return 'impossible_stair';
 }
 
+// ---- The Undertow: dimension #6, a drowned/eldritch-aquatic dimension. Back to a direct
+// boss-kill unlock (see The Fathom Mother above) -- deliberate, not every dimension needs a novel
+// mechanic to feel distinct; this one leans on tone and roster instead. ----
+const UNDERTOW_BIOMES = {
+  kelp_shallows:      { name:'Kelp Shallows',      walkable:true,  glyph:'"', color:'#2a8a6a', bg:'#0a1c16', encounter:[['giant_eel',5],['drift_wraith',4],['drowned_sailor',3]] },
+  drowned_district:   { name:'Drowned District',   walkable:true,  glyph:'.', color:'#3a6a8a', bg:'#0e1a22', encounter:[['drowned_sailor',5],['current_stalker',4],['brinelord',1]] },
+  sunken_plaza:       { name:'Sunken Plaza',        walkable:true,  glyph:'%', color:'#5a9ac0', bg:'#101c28', encounter:[['siren',5],['tideglass_horror',3],['current_stalker',2]] },
+  abyssal_trench:     { name:'Abyssal Trench',       walkable:false, glyph:'~', color:'#082030', bg:'#020608', encounter:[] },
+  the_black_current:  { name:'The Black Current',    walkable:false, glyph:'~', color:'#04141c', bg:'#000204', encounter:[] },
+};
+function classifyUndertowBiome(elev, heat) {
+  if (elev > 0.72) return 'the_black_current';
+  if (heat > 0.66) return 'abyssal_trench';
+  if (elev < 0.30) return 'sunken_plaza';
+  if (heat > 0.50) return 'drowned_district';
+  return 'kelp_shallows';
+}
+
 const DIMENSIONS = {
   abyssal_wastes: {
     id: 'abyssal_wastes', name: 'the Abyssal Wastes', tint: '#ff3a1a',
@@ -9283,6 +9598,14 @@ const DIMENSIONS = {
     subDungeons: [{ key:'gallery', cx: 1, cy: -3, lx: 12, ly: 12, id:'dim_echo_gallery', theme:'echo_gallery',
       entranceName:'the Echo Gallery threshold', entranceGlyph:'=', entranceColor:'#b090ff', decorateStyle:'fortress' }],
     entryFlavor: 'You are certain you have been in this exact spot before, several times, in slightly different orders. None of your memories of it quite agree on what happens next.',
+  },
+  the_undertow: {
+    id: 'the_undertow', name: 'the Undertow', tint: '#0a5a7a',
+    biomes: UNDERTOW_BIOMES, classify: classifyUndertowBiome, noiseSalt: 194857, fillBiome: 'kelp_shallows',
+    arrival: { cx: 0, cy: 0, lx: 12, ly: 12 },
+    subDungeons: [{ key:'choir', cx: -1, cy: 2, lx: 12, ly: 12, id:'dim_drowned_choir', theme:'drowned_choir',
+      entranceName:'the Drowned Choir stair', entranceGlyph:'=', entranceColor:'#0a5a7a', decorateStyle:'fortress' }],
+    entryFlavor: "The pressure is wrong before anything else registers -- too heavy for the shallow water you can see, like the light is lying about how deep this actually goes.",
   },
 };
 
@@ -9472,6 +9795,12 @@ function unlockGildedChoir(def) {
   const lvl = curDungeonLevel();
   unlockDimension('gilded_choir', lvl ? lvl.grid : null, def.x, def.y,
     { xp: 500, gold: 300, message: '*** The last note of Seraphiel\'s judgment fades. A rift now leads into the Gilded Choir -- step onto it and use the enter command to cross over. ***' });
+}
+// Called from onDeath() the moment the Fathom Mother falls.
+function unlockTheUndertow(def) {
+  const lvl = curDungeonLevel();
+  unlockDimension('the_undertow', lvl ? lvl.grid : null, def.x, def.y,
+    { xp: 500, gold: 300, message: '*** The flooded crypt drains all at once, and a rift opens where the Fathom Mother fell -- step onto it and use the enter command to cross over into the Undertow. ***' });
 }
 // The Antagonist's death doesn't end the story -- it reveals what was actually behind them.
 // GOD spawns at the same spot, continuing the encounter directly, no separate area required.
@@ -9678,6 +10007,11 @@ function generateDungeonLevel(theme, depth, maxDepth, variantId) {
             desc: 'Looking through it, the room behind you is very slightly the wrong shape.' }
         ]);
       }
+      // ---- The Fathom Mother: the Flooded Crypt's fixed gatekeeper. Killing her opens the rift
+      // directly, same pattern as Malphegor/Seraphiel. ----
+      if (theme === 'flooded_crypt' && MONSTER_BASES.fathom_mother) {
+        boss = makeMonster('fathom_mother', Math.max(1, bc.x - 1), bc.y, depth + 2, rng);
+      }
       // ---- The Antagonist: whoever the procedural story named as its villain (see
       // generateMainQuest's `antagonist` name) is not just a name attached to reused bosses --
       // they're a real, fixed, uniquely-scripted final confrontation waiting at the Threshold.
@@ -9716,6 +10050,7 @@ function generateDungeonLevel(theme, depth, maxDepth, variantId) {
     const maxValueTier = Math.min(4, rarity + 1);
     const baseIds = ITEM_BASES.filter(b => {
       if (b.type === 'misc' || b.type === 'chest' || b.type === 'corpse') return false;
+      if (b.setId || b.isUnique) return false;
       if ((b.type === 'weapon' || b.type === 'armor') && (b.valueTier || 0) > maxValueTier) return false;
       return true;
     }).map(b => b.id);
@@ -11901,12 +12236,12 @@ const GUIDE_SECTIONS = [
     (fallen knight), <b>Ashgrave, the Hollow King</b> (necromancer), <b>Vex-9, the Discarded Iron</b> and <b>The
     Choir of Rust</b> (two very different war-machines), <b>Skarn Windrender</b> (ranger), <b>Kaelen Frost, the
     Snowbound Warden</b> (ice warden), and <b>Yog'tha, the Unblinking Eye</b> (eldritch horror). Each has real lore,
-    unique dialogue, and a hand-scripted moveset — they don't use the generic monster AI at all. Four more guard
+    unique dialogue, and a hand-scripted moveset — they don't use the generic monster AI at all. Five more guard
     the way into other dimensions: <b>Malphegor, the Rift-Warden</b> (demon gatekeeper), <b>Seraphiel, the
-    Unwritten Choir</b> (celestial gatekeeper), <b>the Hollow Signal</b> (cosmic gatekeeper), and <b>the Uncounted
-    Angle</b> (non-Euclidean gatekeeper). A wandering optional boss, <b>the Recursion</b>, roams the surface world
-    itself rather than guarding a dungeon. Expect multiple phases as HP drops on the scripted ones. More join this
-    roster in future updates.</div>` },
+    Unwritten Choir</b> (celestial gatekeeper), <b>the Hollow Signal</b> (cosmic gatekeeper), <b>the Uncounted
+    Angle</b> (non-Euclidean gatekeeper), and <b>the Fathom Mother</b> (drowned gatekeeper). A wandering optional
+    boss, <b>the Recursion</b>, roams the surface world itself rather than guarding a dungeon. Expect multiple
+    phases as HP drops on the scripted ones. More join this roster in future updates.</div>` },
   { id:'dimensions', label:'Dimensions', html: () => `
     <div class="modal-opt">The world isn't the only world, and there's more than one way in. A rare "Demon Gate"
     dungeon holds <b>Malphegor, the Rift-Warden</b> at the bottom -- defeat him and the gate tears open into
@@ -11926,8 +12261,29 @@ const GUIDE_SECTIONS = [
     rare wandering overworld boss, <b>the Recursion</b>, drops a Recursive Key. Bring both to a rare "Folding
     Stone" landmark and use it there to open a rift into <b>the Fourth Corridor</b> (impossible stairs, folded
     atria, recursive halls, impassable seams, non-Euclidean monsters, and its own optional dungeon, the Echo
-    Gallery). Step onto a glowing rift tile and use the enter command (&gt;) to cross over, and again to come back
-    -- you'll always return to exactly where you left. This is the first five of many dimensions to come.</div>` },
+    Gallery). A sixth path returns to the direct approach: a rare "Flooded Crypt" dungeon holds <b>the Fathom
+    Mother</b> at the bottom, and defeating her tears the rift open on the spot, leading into <b>the Undertow</b>
+    (kelp shallows, a drowned district, a sunken plaza, impassable trenches and currents, drowned monsters
+    alongside a few familiar aquatic ones, and its own optional dungeon, the Drowned Choir). Step onto a glowing
+    rift tile and use the enter command (&gt;) to cross over, and again to come back -- you'll always return to
+    exactly where you left. This is the first six of many dimensions to come.</div>` },
+  { id:'setsuniques', label:'Sets & Uniques', html: () => `
+    <div class="modal-opt">Beyond randomly-rolled affix gear, two kinds of fixed, hand-authored items exist, both
+    earned only through combat -- neither is ever sold by shops or found as ordinary loot.</div>
+    <div class="modal-opt"><b>Item Sets</b> -- four 5-piece sets, one per newer dimension's monster faction, with
+    bonuses that stack as you equip more of a set: <b>${ITEM_SETS.riftwarden.name}</b> (demonic, Abyssal
+    Wastes/Demon Gate -- ${ITEM_SETS.riftwarden.bonuses[2].desc} at 2 pieces, ${ITEM_SETS.riftwarden.bonuses[4].desc}
+    at 4), <b>${ITEM_SETS.choirvestments.name}</b> (celestial, Gilded Choir/Sky Bastion --
+    ${ITEM_SETS.choirvestments.bonuses[2].desc} at 2, ${ITEM_SETS.choirvestments.bonuses[4].desc} at 4),
+    <b>${ITEM_SETS.signallattice.name}</b> (cosmic, the Drift/Derelict Hulk -- ${ITEM_SETS.signallattice.bonuses[2].desc}
+    at 2, ${ITEM_SETS.signallattice.bonuses[4].desc} at 4), and <b>${ITEM_SETS.recursionward.name}</b> (non-Euclidean,
+    the Fourth Corridor/Folded Vault -- ${ITEM_SETS.recursionward.bonuses[2].desc} at 2,
+    ${ITEM_SETS.recursionward.bonuses[4].desc} at 4). Any boss or miniboss belonging to that faction has a chance to
+    drop a random piece of its set on death.</div>
+    <div class="modal-opt"><b>Boss Uniques</b> -- six named weapons/accessories with a fixed identity, each a chance
+    drop from one specific boss: the Rift-Warden's Maw (Malphegor), Choirsong (Seraphiel), the Fractured Beam
+    Emitter (the Hollow Signal), the Wrong Number (the Uncounted Angle), the Hollow King's Scepter (Ashgrave), and
+    the Unblinking Eye (Yog'tha).</div>` },
   { id:'leveling', label:'Leveling', html: () => `
     <div class="modal-opt">Level 99 is the real cap, and now an achievable one -- roughly 450,000 total XP across
     the run, paced so early levels come quickly and the last stretch is a genuine long-game grind. Every level
@@ -12009,111 +12365,6 @@ const GUIDE_SECTIONS = [
   { id:'mouse', label:'Mouse', html: () => `
     <div class="modal-opt">Every menu option is clickable. Click any visible map tile to examine it (including loose
     items — full stats shown, not just the ground biome). Scroll the mouse wheel over the map to zoom.</div>` },
-  { id:'changelog', label:'Changelog', html: () => `
-    <div class="modal-opt" style="border:1px solid var(--amber-dim);padding:6px"><b>Balance &amp; difficulty overhaul (latest):</b>
-    a full pass aimed at one thing — the early game was too easy and gear had no real cost or risk attached to it.
-    See the new <b>Requirements &amp; Durability</b> block in the Equipment tab and the <b>Classes</b> block in Combat
-    for the full breakdown. Summary of what changed:
-    <ul style="margin:6px 0 0 18px;padding:0">
-      <li>Weapons and heavy armor now carry a real STR requirement (soft-gated, not locked) — being under it costs
-      accuracy, damage, dodge, and stamina recovery rather than blocking the item outright.</li>
-      <li>Spells carry an INT requirement and weapon-school techniques carry a STR/DEX requirement in the same spirit
-      — underqualified casting risks a fizzle and pulls damage down.</li>
-      <li>Weapons and armor now have <b>Durability</b>. Ordinary attacks never wear it down — only crits, techniques,
-      tanking a heavy hit, corrosive enemies (oozes), and fire wear gear down. Repair via Repair Kits, a blacksmith's
-      <b>[R]</b> service, the Mending spell / Field Repair technique, or passive auto-repair from the new Blacksmith's
-      Touch talent, Nanite Repair Mesh implant, or Flesh-Melding Symbiosis mutation.</li>
-      <li>Loot rarity is now gated by what's actually dropping it — a trash monster can no longer roll a top-tier
-      "of Eternity"-class item. Every affix now has an explicit tier (0-4), and monster/chest/scatter loot caps which
-      tier it's allowed to reach based on a monster's real threat level (dungeon tier, XP, boss status), not a flat
-      constant. Unguarded overworld ground finds and chest loot are similarly capped by tier/depth.</li>
-      <li>Starting stats dropped from a flat 10 across the board to 8, and max HP/MP at character creation are now
-      <i>derived</i> from CON/INT instead of a flat 26/16 for every class — a warrior's higher CON and a mage's higher
-      INT now actually produce a tankier warrior and a mana-rich mage from level 1, instead of every archetype sharing
-      identical vitals.</li>
-      <li>Custom character creation's point budget came back down from 24 to 20, and no single stat can be pushed
-      above +6 during creation — closes off dumping the whole budget into one stat for an outlier level-1 character.</li>
-      <li>Overworld monsters (and overworld bosses) now scale up the further you wander from your starting area,
-      mirroring the same distance curve settlement size already used — previously only dungeons got harder with
-      progress, and the surface world stayed exactly as easy no matter how far you explored.</li>
-      <li>Critical hits are what they say they are again — critBonus/critDmgBonus talents, gear, and buffs actually
-      apply on top of a base crit chance.</li>
-      <li>Death now gets an actual death screen: cause of death (whatever landed the final blow — a monster, poison,
-      fire, a trap, a fall, drowning), your level/turn/gold/equipment at the time, and a scrollable log of the events
-      leading up to it.</li>
-    </ul></div>
-    <div class="modal-opt"><b>Customization &amp; accessibility pass:</b> floating combat text now rises and
-    fades out smoothly instead of popping up as static text that lingered on screen — it also respects Reduce Motion
-    (shorter rise, same fade). Settings are now reachable mid-game from three places: the <b>⚙</b> button in the
-    top-right corner, or the <b>Esc</b>/<b>P</b> in-game menu, which also gained a <b>Quit to Title Screen</b> option
-    with an optional confirmation prompt. Zoom went from 5 levels to 9, adding three levels closer than the old
-    maximum zoom-in. Display settings gained a Body Font picker (Mono/Pixel/8-Bit/Serif/Sans, on top of the existing
-    header font toggle) and custom Text Color / Accent Color pickers; HUD settings gained a Combat Text Size slider.
-    The Guide was reorganized with a dedicated Controls tab (a full key-binding reference) and this Changelog split out
-    from the old catch-all Meta tab into its own section.</div>
-    <div class="modal-opt"><b>Spells/cyberware/techniques/eldritch quantity + power-tier overhaul:</b> every ability
-    pool expanded past 100 (${SPELLS.length} spells, ${TECHNIQUES.length} techniques, ${CYBERNETICS.length} cybernetics,
-    ${MUTATIONS.length} mutations — 430 total). Added new schools/categories throughout: Elemental Mastery and Storm
-    Magic for spells; Daggers, Dual Wielding, Berserker Arts, Monastic Arts, and Tactics for techniques; Neural, Weapons
-    Systems, Bio-Augment, and Stealth for cybernetics; Void/Cosmic, Predatory, Plague, and Symbiotic for mutations. Real
-    power tiers within each theme now exist end to end — Firebolt (weak, cheap) through Fireball, Greater Fireball,
-    Meteor Swarm, up to Sunfire Cataclysm (an actual sun fragment) at the top, and the same tiering logic runs through
-    frost, lightning, poison/gas, necromancy, holy, and more. Every new fire/gas ability plugs into the terrain-physics
-    engine from the prior pass (real ignition/spread, real lingering gas clouds), and every new teleport ability uses
-    player-directed targeting rather than a random landing spot.</div>
-    <div class="modal-opt">Bugs found and fixed during this pass: a spell/talent post-processing step from an earlier
-    change had accidentally been relocated ahead of the data it modified (breaking Caustic Gas's real gas cloud and
-    Firebolt's ground ignition without any error message — just silent no-ops), and a global monster-faction lookup set
-    (<code>UNDEAD_IDS</code>) had been accidentally deleted entirely during an earlier edit, which would have crashed
-    the game the moment any Holy-school smite spell was cast. Both were caught by actually casting/applying all 430
-    abilities in a simulated arena and checking the results, not by reading the code.</div>
-    <div class="modal-opt"><b>Talents, crafting, cooking & alchemy overhaul:</b> talent tree expanded from 39 to
-    ${TALENTS_V2.length}, now covering cooking, alchemy, and swimming as real build paths (not just combat/magic),
-    each with genuine mechanical hooks (heal/buff potency, ingredient efficiency, thrown-weapon damage, dodge, thorns,
-    execute damage, boss damage, elemental damage, gold find, XP gain). Recipes expanded from 8 to ${RECIPES.length}
-    (${RECIPES.filter(r=>r.category==='cooking').length} cooking, ${RECIPES.filter(r=>r.category==='crafting').length}
-    crafting/alchemy), covering simple foods, stat-buffing feasts, immunity dishes, foods that temporarily grant you a
-    spell you don't know, and endgame superweapons (Tactical Nuke, Void Core Bomb, Antimatter Charge). A pure cook/
-    alchemist build is now genuinely viable end to end.</div>
-    <div class="modal-opt">Bugs found and fixed along the way: the "food" effect was hardcoded to always heal exactly
-    2 HP no matter what a food item's actual power was, silently making every food item from the items pass identical;
-    recipe output quantities were defined but never used, so crafting always produced exactly 1 item regardless of what
-    the recipe said; and two separate spell/talent post-processing steps (that tag Caustic Gas/Firebolt/etc. with their
-    real behavior, and that tag talent categories) were executing before the data they were trying to modify had
-    actually loaded, silently no-op'ing — caught both by testing the actual runtime behavior, not just checking syntax.</div>
-    <div class="modal-opt"><b>Spells/cyberware/techniques/eldritch overhaul:</b> abilities now do what they say instead of
-    being a flat damage/debuff number. Fire-flavored spells (Firebolt, Soul Bolt, Alchemist's Fire, Pyrogenesis) and
-    dragon breath genuinely ignite the ground, spread across flammable terrain, produce lingering smoke that blocks
-    sight, and fizzle into steam against water. Gas/cloud abilities (Caustic Gas, Poison Cloud, Hallucinogenic Mist,
-    Poison Gas Grenade, gas-cloud monsters) leave a real lingering cloud that affects anyone who walks into it later,
-    not just whoever was standing there at cast time. Every blink/teleport ability across spells, cybernetics, and
-    mutations (Blink, Phantom Step, Time Skip, Vestigial Wings, Warp Step, Blink Drive, Grapple Hook) now lets you pick
-    your own destination instead of picking a random reachable tile for you. Click-to-inspect now shows active status
-    effects on yourself and on enemies, not just HP/description.</div>
-    <div class="modal-opt"><b>Items/gear/consumables overhaul:</b> item roster expanded to ${ITEM_BASES.filter(b=>b.type==='weapon').length}
-    weapons, ${ITEM_BASES.filter(b=>b.type==='armor').length} armor pieces, ${ITEM_BASES.filter(b=>b.type==='consumable').length}
-    consumables, and ${ITEM_BASES.filter(b=>b.type==='scroll').length} scrolls across every theme and build. Fixed a real bug where
-    equipped +STR/+DEX/+INT/+CON bonuses were shown in tooltips but never actually applied — they now work properly (INT grants
-    real max Mana, CON grants real max HP). Added working elemental/poison resistance potions, invisibility, area reveal, curse
-    removal, and grenades that land at the target's location instead of just going off around you. A real Slow status now exists
-    (caltrops/net traps use it) instead of being silently ignored.</div>
-    <div class="modal-opt"><b>Dungeons/bosses overhaul:</b> fixed the root cause of dungeons being wildly easier or harder than
-    their label suggested — final bosses are now matched to the dungeon's actual depth via a numeric power rating, not just a
-    "common/uncommon/rare" string. Rare dungeons are now genuinely rare near your starting area. Every dungeon theme can roll one
-    of 5 rarity variants (Weathered/Standard/Ancient/Corrupted/Legendary) affecting difficulty, loot, and miniboss odds. Boss
-    roster expanded from 15 to 26, now covering every faction. Fixed a rare (but real) crash in room generation found via
-    large-scale stress testing.</div>
-    <div class="modal-opt"><b>Enemies/AI overhaul:</b> monster roster expanded from 59 to 143+, spanning goblinoid, orc/giantkin,
-    undead, demonic, beast, dragonkin, arcane/construct, eldritch, aquatic, ooze, cyberpunk, human, and plant factions, plus 11
-    minibosses. New AI behaviors beyond simple chase/flee/ranged: chargers that close multiple tiles and breathe fire/frost,
-    splitters, summoners, ambushers, burrowers, phasers, turrets, kiters, swarms, and berserkers. Dungeon monster spawning is now
-    theme-aware, so enemies show up where they thematically belong instead of any monster spawning in any dungeon.</div>
-    <div class="modal-opt">Custom character creation now lets you step <b>[&lt;] Back</b> to any
-    earlier stage without losing your picks, and adds Eldritch Mutations and Cyberware as two more point-buy ability
-    categories alongside Spells and Techniques (press 1-4 on the Abilities step to switch between them). The point
-    budget was raised from 20 to ${CREATION_POINTS} to comfortably fit hybrid builds — every premade archetype can
-    still be fully recreated in Custom with room to spare.</div>
-    <div class="modal-opt">The compass now correctly points North "up" (screen convention), matching the map.</div>` },
   { id:'saves', label:'Saves & Meta', html: () => `
     <div class="modal-opt">Saving uses your browser's local storage automatically when you choose Save (accessible via
     the in-game menu, key <b>Esc</b> or <b>P</b>). If local storage isn't available, or you want a portable backup, Export
@@ -12122,8 +12373,7 @@ const GUIDE_SECTIONS = [
     you.</div>
     <div class="modal-opt">Autosave runs periodically while you play (interval configurable under Gameplay settings,
     or turn it off entirely). Settings themselves — display, HUD, gameplay, and accessibility — save instantly to local
-    storage the moment you change them, independent of your character save.</div>
-    <div class="modal-opt">Full changelog and version history live in the Changelog tab.</div>` },
+    storage the moment you change them, independent of your character save.</div>` },
 ];
 let guideCurrentTab = 'start';
 function guideSearchBarHtml(query) {
